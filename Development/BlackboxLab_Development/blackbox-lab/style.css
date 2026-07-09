@@ -1,0 +1,10 @@
+body{margin:0;background:#101827;color:#eef4ff;font-family:Arial,sans-serif}
+.wrap{max-width:1180px;margin:auto;padding:34px}
+h1{font-size:44px;margin-bottom:6px}
+h2{color:#b8d8ff}
+.card{background:#1b2942;border:1px solid #4d6f97;border-radius:14px;padding:20px;margin:18px 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.big{font-size:46px;color:#47e57b;font-weight:bold}
+pre{white-space:pre-wrap;background:#0f1b2e;border-radius:10px;padding:16px;line-height:1.4}
+button{background:#2f6fed;color:white;border:0;border-radius:9px;padding:12px 18px;font-size:16px;font-weight:bold;cursor:pointer}
+button:disabled{background:#586377;cursor:not-allowed}
