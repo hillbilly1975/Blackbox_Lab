@@ -12,24 +12,66 @@
       <h1>Blackbox Lab</h1>
       <p class="tagline">Rotorflight Analysis Suite</p>
 
-      <button>Home</button>
-      <button>Open Blackbox Log</button>
-      <button>Flight Analysis</button>
-      <button>Governor Lab</button>
-      <button>ESC Lab</button>
-      <button>Battery Lab</button>
-      <button>Reports</button>
-      <button>Settings</button>
+      <button class="nav-button active">Home</button>
+      <button class="nav-button" id="openLogButton">Open Blackbox Log</button>
+      <button class="nav-button">Flight Analysis</button>
+      <button class="nav-button">Governor Lab</button>
+      <button class="nav-button">ESC Lab</button>
+      <button class="nav-button">Battery Lab</button>
+      <button class="nav-button">Reports</button>
+      <button class="nav-button">Settings</button>
     </aside>
 
     <main class="workspace">
-      <h2>Welcome to Blackbox Lab</h2>
-      <p>Simple first. Deeper when you want it.</p>
+      <section class="hero">
+        <h2>Welcome to Blackbox Lab</h2>
+        <p>Simple first. Deeper when you want it.</p>
+      </section>
 
-      <div class="drop-zone">
-        Drop a Blackbox log here
-      </div>
+      <section class="card">
+        <h3>Open Flight Log</h3>
+        <p>Select a Rotorflight Blackbox CSV or log file to begin analysis.</p>
+
+        <input type="file" id="logFileInput" accept=".csv,.bbl,.txt" hidden />
+
+        <button class="primary-button" id="chooseFileButton">
+          Open Blackbox Log
+        </button>
+
+        <div class="file-status" id="fileStatus">
+          No log loaded
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Flight Summary</h3>
+        <h3>Telemetry Columns</h3>
+        <pre id="telemetryColumns">No telemetry loaded.</pre>
+        <div class="summary-grid">
+          <div>
+            <span class="label">File Name</span>
+            <strong id="summaryFileName">---</strong>
+          </div>
+
+          <div>
+            <span class="label">File Size</span>
+            <strong id="summaryFileSize">---</strong>
+          </div>
+
+          <div>
+            <span class="label">Status</span>
+            <strong id="summaryStatus">Waiting for log</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Raw Log Preview</h3>
+        <pre id="rawPreview">No log loaded</pre>
+      </section>
     </main>
   </div>
+
+  <script type="module" src="./renderer.js"></script>
 </body>
 </html>
