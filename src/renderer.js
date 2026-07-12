@@ -13,6 +13,7 @@ import {
   getStandardDeviation,
   clampScore
 } from "./analysis/mathHelpers.js";
+import { updateScreen } from "./ui/screenUpdater.js";
 
 //
 // SECTION MAP
@@ -126,32 +127,9 @@ function openFilePicker() {
 // ======================================================
 // 13. FLIGHT ANALYSIS BUILDER
 // ======================================================
-function updateScreen({
-  telemetryText,
-  file,
-  sizeKb,
-  lines,
-  extraSummary
-}) {
-  telemetryColumns.textContent = telemetryText;
 
-  fileStatus.textContent = `Loaded: ${file.name}`;
-  summaryFileName.textContent = file.name;
-  summaryFileSize.textContent = `${sizeKb} KB`;
-
-  summaryStatus.innerHTML = `
-    Log selected<br>
-    Rows: ${lines.length}<br>
-    ${extraSummary}
-  `;
-
-  const previewLines = lines
-    .slice(0, 12)
-    .join("\n");
-
-  rawPreview.textContent = previewLines;
-}
-
+  
+  
 
 // ======================================================
 // 14. BUTTON EVENTS
@@ -539,6 +517,12 @@ logFileInput.addEventListener("change", async () => {
   file,
   sizeKb,
   lines,
-  extraSummary
+  extraSummary,
+  telemetryColumns,
+  fileStatus,
+  summaryFileName,
+  summaryFileSize,
+  summaryStatus,
+  rawPreview
 });
 });
