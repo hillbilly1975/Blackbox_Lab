@@ -1,18 +1,8 @@
 // ======================================================
 // BLACKBOX LAB — MAIN RENDERER
 // ======================================================
-import { analyzeGovernor } from "./analysis/governorAnalysis.js";
 import { aircraftProfiles } from "./profiles/aircraftProfiles.js";
-import { analyzeTelemetry } from "./analysis/telemetryAnalysis.js";
-import { analyzeAircraftProfile } from "./analysis/aircraftProfileAnalysis.js";
-import { analyzeEscOutput } from "./analysis/escAnalysis.js";
 import { buildFlightAnalysis } from "./analysis/flightAnalysis.js";
-
-import {
-  calculateOverallFlightScore,
-  getScoreRating,
-  getAnalysisConfidence
-} from "./analysis/flightScoring.js";
 //
 // SECTION MAP
 // 01. DOM REFERENCES
