@@ -1,3 +1,4 @@
+import { buildAnalysisContext } from "./analysisContext.js";
 import { getMetadataValue } from "./metadataReader.js";
 import { findTelemetryHeaderIndex } from "./telemetryHeader.js";
 import { findHeader } from "./headerHelpers.js";
@@ -13,7 +14,7 @@ export function buildLogAnalysis({
 }) {
   let extraSummary = "";
   let telemetryText = "No telemetry found.";
-
+  let analysisContext = null;
 
   // ====================================================
   // BLACKBOX BBL LOG
@@ -39,7 +40,7 @@ export function buildLogAnalysis({
     let averageEscOutput = null;
     let averageEscRPM = null;
     let flightAnalysis = null;
-
+    
 
     // --------------------------------------------------
     // 15A. TELEMETRY COLUMN EXTRACTION
@@ -150,6 +151,42 @@ export function buildLogAnalysis({
           governorTargetHeader
         ]
       ];
+     
+  analysisContext = buildAnalysisContext({
+  fileType,
+  lines,
+  aircraftProfile: profile,
+  firmware,
+  firmwareRevision,
+  board,
+  craftName,
+  logStart,
+  telemetryHeaderIndex,
+
+  detectedTelemetry: {
+    time: findHeader(headers, ["time"]),
+    batteryVoltage: findHeader(headers, ["vbat", "escv"]),
+    current: findHeader(headers, ["current", "esci"]),
+    escOutput: escOutputHeader,
+    escRpm: escRpmHeader,
+    headspeed: headspeedHeader,
+    escTemperature: findHeader(headers, ["tesc", "tmcu", "esc2t"]),
+    governorP: findHeader(headers, ["govp"]),
+    governorI: findHeader(headers, ["govi"]),
+    governorD: findHeader(headers, ["govd"]),
+    governorTarget: governorTargetHeader
+  },
+
+  evidenceSources: {
+    bbl: fileType === "Blackbox BBL Log",
+    csv: false,
+    cli: false,
+    aircraftProfile: Boolean(profile),
+    telemetry: telemetryHeaderIndex >= 0,
+    gps: false
+  }
+
+});
 
       flightAnalysis = buildFlightAnalysis(
         averageEscOutput,
@@ -358,8 +395,10 @@ export function buildLogAnalysis({
       Status: Blackbox Lab does not recognize this file yet.
     `;
   }
+  
     return {
-    extraSummary,
-    telemetryText
-  };
+  extraSummary,
+  telemetryText,
+  analysisContext
+};
 }

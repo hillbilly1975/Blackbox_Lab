@@ -139,13 +139,14 @@ const {
 
   const {
   extraSummary,
-  telemetryText
+  telemetryText,
+  analysisContext
 } = buildLogAnalysis({
   fileType,
   lines,
   aircraftProfiles
 });
-
+  
   // ====================================================
   // 16. SCREEN UPDATE
   // ====================================================
