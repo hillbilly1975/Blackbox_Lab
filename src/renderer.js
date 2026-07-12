@@ -5,6 +5,7 @@ import { aircraftProfiles } from "./profiles/aircraftProfiles.js";
 import { buildFlightAnalysis } from "./analysis/flightAnalysis.js";
 import { identifyFile } from "./analysis/fileIdentification.js";
 import { getMetadataValue } from "./analysis/metadataReader.js";
+import { findHeader } from "./analysis/headerHelpers.js";
 //
 // SECTION MAP
 // 01. DOM REFERENCES
@@ -88,13 +89,6 @@ function findTelemetryHeaderIndex(lines) {
 }
 
 
-function findHeader(headers, words) {
-  return headers.find((header) => {
-    const lower = header.toLowerCase();
-
-    return words.some((word) => lower.includes(word));
-  });
-}
 
 
 // ======================================================
