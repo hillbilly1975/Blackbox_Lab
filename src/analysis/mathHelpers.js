@@ -1,3 +1,28 @@
+export function getColumnValues(
+  lines,
+  headerIndex,
+  columnName
+) {
+  if (!columnName || headerIndex < 0) {
+    return [];
+  }
+
+  const headers = lines[headerIndex]
+    .split(",")
+    .map((header) => header.trim());
+
+  const columnIndex = headers.indexOf(columnName);
+
+  if (columnIndex < 0) {
+    return [];
+  }
+
+  return lines
+    .slice(headerIndex + 1)
+    .map((line) => line.split(",")[columnIndex])
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value));
+}
 export function getStandardDeviation(values) {
   if (!values || values.length === 0) {
     return null;

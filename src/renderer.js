@@ -7,7 +7,10 @@ import { identifyFile } from "./analysis/fileIdentification.js";
 import { getMetadataValue } from "./analysis/metadataReader.js";
 import { findHeader } from "./analysis/headerHelpers.js";
 import { findTelemetryHeaderIndex } from "./analysis/telemetryHeader.js";
-import { getStandardDeviation } from "./analysis/mathHelpers.js";
+import {
+  getColumnValues,
+  getStandardDeviation
+} from "./analysis/mathHelpers.js";
 //
 // SECTION MAP
 // 01. DOM REFERENCES
@@ -81,27 +84,6 @@ function openFilePicker() {
 // 07. COLUMN AND MATH HELPERS
 // ======================================================
 
-function getColumnValues(lines, headerIndex, columnName) {
-  if (!columnName || headerIndex < 0) {
-    return [];
-  }
-
-  const headers = lines[headerIndex]
-    .split(",")
-    .map((header) => header.trim());
-
-  const columnIndex = headers.indexOf(columnName);
-
-  if (columnIndex < 0) {
-    return [];
-  }
-
-  return lines
-    .slice(headerIndex + 1)
-    .map((line) => line.split(",")[columnIndex])
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value));
-}
 
 
 function getColumnAverage(lines, headerIndex, columnName) {
