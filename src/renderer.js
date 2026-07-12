@@ -8,9 +8,10 @@ import { getMetadataValue } from "./analysis/metadataReader.js";
 import { findHeader } from "./analysis/headerHelpers.js";
 import { findTelemetryHeaderIndex } from "./analysis/telemetryHeader.js";
 import {
-  getColumnValues,
+   getColumnValues,
   getColumnAverage,
-  getStandardDeviation
+  getStandardDeviation,
+  clampScore
 } from "./analysis/mathHelpers.js";
 
 //
@@ -96,9 +97,6 @@ function openFilePicker() {
 // 08. ESC ANALYSIS
 // ======================================================
 
-function clampScore(score) {
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
 
 
 
