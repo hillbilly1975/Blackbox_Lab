@@ -3,7 +3,6 @@
 // ======================================================
 import { aircraftProfiles } from "./profiles/aircraftProfiles.js";
 import { buildFlightAnalysis } from "./analysis/flightAnalysis.js";
-import { identifyFile } from "./analysis/fileIdentification.js";
 import { getMetadataValue } from "./analysis/metadataReader.js";
 import { findHeader } from "./analysis/headerHelpers.js";
 import { findTelemetryHeaderIndex } from "./analysis/telemetryHeader.js";
@@ -14,7 +13,7 @@ import {
   clampScore
 } from "./analysis/mathHelpers.js";
 import { updateScreen } from "./ui/screenUpdater.js";
-
+import { readLogFile } from "./analysis/logFileReader.js";
 //
 // SECTION MAP
 // 01. DOM REFERENCES
@@ -142,22 +141,20 @@ openLogButton.addEventListener("click", openFilePicker);
 // ======================================================
 // 15. LOG FILE READER
 // ======================================================
-
 logFileInput.addEventListener("change", async () => {
-  const file = logFileInput.files[0];
+const logData = await readLogFile(logFileInput.files[0]);
 
-  if (!file) {
-    return;
-  }
+if (!logData) {
+  return;
+}
 
-  const sizeKb = (file.size / 1024).toFixed(1);
-  const text = await file.text();
-
-  const lines = text
-    .split(/\r?\n/)
-    .filter((line) => line.trim() !== "");
-
-  const fileType = identifyFile(lines);
+const {
+  file,
+  sizeKb,
+  text,
+  lines,
+  fileType
+} = logData;
 
   let extraSummary = "";
   let telemetryText = "No telemetry found.";
