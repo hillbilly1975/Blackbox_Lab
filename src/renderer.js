@@ -6,6 +6,7 @@ import { buildFlightAnalysis } from "./analysis/flightAnalysis.js";
 import { identifyFile } from "./analysis/fileIdentification.js";
 import { getMetadataValue } from "./analysis/metadataReader.js";
 import { findHeader } from "./analysis/headerHelpers.js";
+import { findTelemetryHeaderIndex } from "./analysis/telemetryHeader.js";
 //
 // SECTION MAP
 // 01. DOM REFERENCES
@@ -71,22 +72,6 @@ function openFilePicker() {
 // 06. TELEMETRY HEADER DETECTION
 // ======================================================
 
-function findTelemetryHeaderIndex(lines) {
-  return lines.findIndex((line) => {
-    const lower = line.toLowerCase();
-
-    return (
-      lower.includes("time") &&
-      lower.includes(",") &&
-      (
-        lower.includes("vbat") ||
-        lower.includes("voltage") ||
-        lower.includes("rpm") ||
-        lower.includes("motor")
-      )
-    );
-  });
-}
 
 
 
