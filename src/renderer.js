@@ -9,8 +9,10 @@ import { findHeader } from "./analysis/headerHelpers.js";
 import { findTelemetryHeaderIndex } from "./analysis/telemetryHeader.js";
 import {
   getColumnValues,
+  getColumnAverage,
   getStandardDeviation
 } from "./analysis/mathHelpers.js";
+
 //
 // SECTION MAP
 // 01. DOM REFERENCES
@@ -86,17 +88,6 @@ function openFilePicker() {
 
 
 
-function getColumnAverage(lines, headerIndex, columnName) {
-  const values = getColumnValues(lines, headerIndex, columnName);
-
-  if (values.length === 0) {
-    return null;
-  }
-
-  const total = values.reduce((sum, value) => sum + value, 0);
-
-  return total / values.length;
-}
 
 
 

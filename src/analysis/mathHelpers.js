@@ -23,6 +23,28 @@ export function getColumnValues(
     .map((value) => Number(value))
     .filter((value) => Number.isFinite(value));
 }
+export function getColumnAverage(
+  lines,
+  headerIndex,
+  columnName
+) {
+  const values = getColumnValues(
+    lines,
+    headerIndex,
+    columnName
+  );
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  const total = values.reduce(
+    (sum, value) => sum + value,
+    0
+  );
+
+  return total / values.length;
+}
 export function getStandardDeviation(values) {
   if (!values || values.length === 0) {
     return null;
