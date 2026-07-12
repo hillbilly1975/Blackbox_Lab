@@ -7,6 +7,7 @@ import { identifyFile } from "./analysis/fileIdentification.js";
 import { getMetadataValue } from "./analysis/metadataReader.js";
 import { findHeader } from "./analysis/headerHelpers.js";
 import { findTelemetryHeaderIndex } from "./analysis/telemetryHeader.js";
+import { getStandardDeviation } from "./analysis/mathHelpers.js";
 //
 // SECTION MAP
 // 01. DOM REFERENCES
@@ -116,23 +117,6 @@ function getColumnAverage(lines, headerIndex, columnName) {
 }
 
 
-function getStandardDeviation(values) {
-  if (!values || values.length === 0) {
-    return null;
-  }
-
-  const average =
-    values.reduce((sum, value) => sum + value, 0) /
-    values.length;
-
-  const variance =
-    values.reduce((sum, value) => {
-      const difference = value - average;
-      return sum + difference * difference;
-    }, 0) / values.length;
-
-  return Math.sqrt(variance);
-}
 
 
 // ======================================================
