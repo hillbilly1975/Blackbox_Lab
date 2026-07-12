@@ -126,7 +126,31 @@ function openFilePicker() {
 // ======================================================
 // 13. FLIGHT ANALYSIS BUILDER
 // ======================================================
+function updateScreen({
+  telemetryText,
+  file,
+  sizeKb,
+  lines,
+  extraSummary
+}) {
+  telemetryColumns.textContent = telemetryText;
 
+  fileStatus.textContent = `Loaded: ${file.name}`;
+  summaryFileName.textContent = file.name;
+  summaryFileSize.textContent = `${sizeKb} KB`;
+
+  summaryStatus.innerHTML = `
+    Log selected<br>
+    Rows: ${lines.length}<br>
+    ${extraSummary}
+  `;
+
+  const previewLines = lines
+    .slice(0, 12)
+    .join("\n");
+
+  rawPreview.textContent = previewLines;
+}
 
 
 // ======================================================
@@ -510,21 +534,11 @@ logFileInput.addEventListener("change", async () => {
   // 16. SCREEN UPDATE
   // ====================================================
 
-  telemetryColumns.textContent = telemetryText;
-
-  fileStatus.textContent = `Loaded: ${file.name}`;
-  summaryFileName.textContent = file.name;
-  summaryFileSize.textContent = `${sizeKb} KB`;
-
-  summaryStatus.innerHTML = `
-    Log selected<br>
-    Rows: ${lines.length}<br>
-    ${extraSummary}
-  `;
-
-  const previewLines = lines
-    .slice(0, 12)
-    .join("\n");
-
-  rawPreview.textContent = previewLines;
+ updateScreen({
+  telemetryText,
+  file,
+  sizeKb,
+  lines,
+  extraSummary
+});
 });
