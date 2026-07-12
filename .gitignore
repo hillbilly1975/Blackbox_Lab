@@ -92,3 +92,7 @@ typings/
 out/
 desktop.ini
 *.zip
+
+# Blackbox Lab local files
+Test_Logs/
+Development/BlackboxLab_Development/blackbox-lab/
