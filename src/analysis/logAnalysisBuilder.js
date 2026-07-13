@@ -7,6 +7,7 @@ import {
   getColumnAverage
 } from "./mathHelpers.js";
 import { buildFlightAnalysis } from "./flightAnalysis.js";
+import { analyzeFilters } from "./filterAnalysis.js";
 export function buildLogAnalysis({
   fileType,
   lines,
@@ -15,7 +16,7 @@ export function buildLogAnalysis({
   let extraSummary = "";
   let telemetryText = "No telemetry found.";
   let analysisContext = null;
-
+  let filterAnalysis = null;
   // ====================================================
   // BLACKBOX BBL LOG
   // ====================================================
@@ -162,7 +163,7 @@ export function buildLogAnalysis({
   craftName,
   logStart,
   telemetryHeaderIndex,
-
+  allColumns: headers,
   detectedTelemetry: {
     time: findHeader(headers, ["time"]),
     batteryVoltage: findHeader(headers, ["vbat", "escv"]),
@@ -187,7 +188,10 @@ export function buildLogAnalysis({
   }
 
 });
-
+filterAnalysis = analyzeFilters(
+  analysisContext,
+  lines
+);
       flightAnalysis = buildFlightAnalysis(
         averageEscOutput,
         profile,
@@ -399,6 +403,7 @@ export function buildLogAnalysis({
     return {
   extraSummary,
   telemetryText,
-  analysisContext
+  analysisContext,
+  filterAnalysis
 };
 }
