@@ -7,7 +7,10 @@ export function buildAnalysisContext({
   board = null,
   craftName = null,
   logStart = null,
+  averageHeadspeed = null,
+  headspeedProfiles = [],
   telemetryHeaderIndex = null,
+  allColumns = [],
   detectedTelemetry = {},
   evidenceSources = {}
 }) {
@@ -49,18 +52,23 @@ export function buildAnalysisContext({
     },
 
     flight: {
-      logStart,
-      telemetryHeaderIndex
-    },
+  logStart,
+  telemetryHeaderIndex,
+  averageHeadspeed,
+   headspeedProfiles
+},
 
     telemetry: {
-      detected: detectedTelemetry,
-      available: availableTelemetry,
-      missing: missingTelemetry,
-      availableCount: availableTelemetry.length,
-      missingCount: missingTelemetry.length
-    },
-
+  allColumns,
+  columnCount: Array.isArray(allColumns)
+    ? allColumns.length
+    : 0,
+  detected: detectedTelemetry,
+  available: availableTelemetry,
+  missing: missingTelemetry,
+  availableCount: availableTelemetry.length,
+  missingCount: missingTelemetry.length
+},
     evidence: {
       sources: evidenceSources,
       available: availableEvidence,

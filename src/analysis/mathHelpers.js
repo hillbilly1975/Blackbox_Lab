@@ -3,7 +3,11 @@ export function getColumnValues(
   headerIndex,
   columnName
 ) {
-  if (!columnName || headerIndex < 0) {
+  if (
+    !Array.isArray(lines) ||
+    !columnName ||
+    headerIndex < 0
+  ) {
     return [];
   }
 
@@ -23,6 +27,55 @@ export function getColumnValues(
     .map((value) => Number(value))
     .filter((value) => Number.isFinite(value));
 }
+
+export function getColumnSamples(
+  lines,
+  headerIndex,
+  columnName
+) {
+  if (
+    !Array.isArray(lines) ||
+    !columnName ||
+    headerIndex < 0
+  ) {
+    return [];
+  }
+
+  const headers = lines[headerIndex]
+    .split(",")
+    .map((header) => header.trim());
+
+  const columnIndex = headers.indexOf(columnName);
+
+  if (columnIndex < 0) {
+    return [];
+  }
+
+  const samples = [];
+
+  for (
+    let rowIndex = headerIndex + 1;
+    rowIndex < lines.length;
+    rowIndex += 1
+  ) {
+    const cells = lines[rowIndex].split(",");
+    const value = Number(cells[columnIndex]);
+
+    if (Number.isFinite(value)) {
+      samples.push({
+        rowIndex,
+        value
+      });
+    }
+  }
+
+  return samples;
+}
+    
+
+
+  
+
 export function getColumnAverage(
   lines,
   headerIndex,

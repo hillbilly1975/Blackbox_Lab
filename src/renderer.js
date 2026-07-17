@@ -30,7 +30,20 @@ const summaryFileSize = document.getElementById("summaryFileSize");
 const summaryStatus = document.getElementById("summaryStatus");
 const rawPreview = document.getElementById("rawPreview");
 const telemetryColumns = document.getElementById("telemetryColumns");
+const filterAnalysisStatus =
+  document.getElementById("filterAnalysisStatus");
 
+const filterAnalysisScore =
+  document.getElementById("filterAnalysisScore");
+
+const filterAnalysisConfidence =
+  document.getElementById("filterAnalysisConfidence");
+
+const filterAnalysisFindings =
+  document.getElementById("filterAnalysisFindings");
+
+const filterAnalysisRecommendations =
+  document.getElementById("filterAnalysisRecommendations");
 
 
 
@@ -140,13 +153,14 @@ const {
   const {
   extraSummary,
   telemetryText,
-  analysisContext
+  analysisContext,
+  filterAnalysis
 } = buildLogAnalysis({
   fileType,
   lines,
   aircraftProfiles
 });
-  
+
   // ====================================================
   // 16. SCREEN UPDATE
   // ====================================================
@@ -158,10 +172,16 @@ const {
   lines,
   extraSummary,
   telemetryColumns,
+   filterAnalysis,
   fileStatus,
   summaryFileName,
   summaryFileSize,
   summaryStatus,
+  filterAnalysisStatus,
+  filterAnalysisScore,
+  filterAnalysisConfidence,
+  filterAnalysisFindings,
+  filterAnalysisRecommendations,
   rawPreview
-});
-});
+  });
+  });

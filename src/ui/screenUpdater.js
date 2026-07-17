@@ -67,19 +67,51 @@ const gyroReductionFindings = Array.isArray(
       return `${axis.axis}: Raw ${rawAverage}, Filtered ${filteredAverage}, Reduction ${reductionPercent}%`;
     })
   : [];
-  const combinedFindings = [
+  const summaryFindings = Array.isArray(filterAnalysis.summaryFindings)
+  ? filterAnalysis.summaryFindings
+  : [];
+
+const technicalFindings = [
   ...(Array.isArray(filterAnalysis.findings)
     ? filterAnalysis.findings
     : []),
   ...gyroReductionFindings
 ];
 
+const combinedFindings = [
+  ...summaryFindings,
+  ...technicalFindings
+];
 
 filterAnalysisFindings.innerHTML =
-  combinedFindings.length > 0
-    ? combinedFindings
-        .map((finding) => `<div>• ${finding}</div>`)
-        .join("")
+  summaryFindings.length > 0 || technicalFindings.length > 0
+    ? `
+        ${
+          summaryFindings.length > 0
+            ? `
+              <h4>Summary</h4>
+              ${summaryFindings
+                .map((finding) => `<div>• ${finding}</div>`)
+                .join("")}
+            `
+            : ""
+        }
+
+        ${
+          technicalFindings.length > 0
+  ? `
+      <details>
+        <summary><strong>Technical Findings</strong></summary>
+        <div>
+          ${technicalFindings
+            .map((finding) => `<div>• ${finding}</div>`)
+            .join("")}
+        </div>
+      </details>
+    `
+  : ""
+        }
+      `
     : "No findings available.";
 
   filterAnalysisRecommendations.innerHTML =

@@ -4,14 +4,113 @@ import { findTelemetryHeaderIndex } from "./telemetryHeader.js";
 import { findHeader } from "./headerHelpers.js";
 import {
   getColumnValues,
-  getColumnAverage
+  getColumnAverage,
+  getColumnSamples
 } from "./mathHelpers.js";
 import { buildFlightAnalysis } from "./flightAnalysis.js";
 import { analyzeFilters } from "./filterAnalysis.js";
+function detectHeadspeedProfiles(
+  headspeedValues,
+  governorTargetValues,
+  alignedHeadspeedSamples = []
+) {
+  const rowAlignedSamples =
+  Array.isArray(alignedHeadspeedSamples)
+    ? alignedHeadspeedSamples
+    : [];
+  if (
+  !Array.isArray(headspeedValues) ||
+  !Array.isArray(governorTargetValues)
+) {
+  return [];
+}
+
+const profileSamples =
+  rowAlignedSamples.length > 0
+    ? rowAlignedSamples
+    : headspeedValues.map((measuredRpm, index) => ({
+        rowIndex: null,
+        measuredRpm: Number(measuredRpm),
+        targetRpm: Number(governorTargetValues[index])
+      }));
+
+ const sampleCount = profileSamples.length;
+
+  const profileGroups = new Map();
+
+  for (const sample of profileSamples) {
+  const measuredRpm = Number(sample.measuredRpm);
+  const targetRpm = Number(sample.targetRpm);
+
+    if (
+      !Number.isFinite(measuredRpm) ||
+      !Number.isFinite(targetRpm) ||
+      targetRpm < 300
+    ) {
+      continue;
+    }
+
+    // Ignore spool-up, spool-down, and large transient errors.
+    const minimumStableRpm = targetRpm * 0.7;
+    const maximumStableRpm = targetRpm * 1.3;
+
+    if (
+      measuredRpm < minimumStableRpm ||
+      measuredRpm > maximumStableRpm
+    ) {
+      continue;
+    }
+
+    // Combine tiny target fluctuations into the same RPM profile.
+    const targetBucket =
+      Math.round(targetRpm / 10) * 10;
+
+    if (!profileGroups.has(targetBucket)) {
+      profileGroups.set(targetBucket, {
+        targetRpm: targetBucket,
+        measuredTotal: 0,
+        sampleCount: 0,
+        sampleIndexes: [],
+        minimumRpm: measuredRpm,
+        maximumRpm: measuredRpm
+      });
+    }
+
+    const profile = profileGroups.get(targetBucket);
+
+    profile.measuredTotal += measuredRpm;
+    profile.sampleCount += 1;
+    if (Number.isInteger(sample.rowIndex)) {
+  profile.sampleIndexes.push(sample.rowIndex);
+}
+    profile.minimumRpm = Math.min(
+      profile.minimumRpm,
+      measuredRpm
+    );
+    profile.maximumRpm = Math.max(
+      profile.maximumRpm,
+      measuredRpm
+    );
+  }
+
+  return Array.from(profileGroups.values())
+    .filter((profile) => profile.sampleCount >= 1000)
+    .map((profile) => ({
+      targetRpm: profile.targetRpm,
+      averageRpm:
+        profile.measuredTotal / profile.sampleCount,
+      minimumRpm: profile.minimumRpm,
+      maximumRpm: profile.maximumRpm,
+      sampleCount: profile.sampleCount,
+      sampleIndexes: profile.sampleIndexes
+    }))
+    .sort((a, b) => a.targetRpm - b.targetRpm);
+}
 export function buildLogAnalysis({
   fileType,
   lines,
-  aircraftProfiles
+  aircraftProfiles,
+  
 }) {
   let extraSummary = "";
   let telemetryText = "No telemetry found.";
@@ -83,19 +182,65 @@ export function buildLogAnalysis({
         telemetryHeaderIndex,
         escRpmHeader
       );
-
       const headspeedValues = getColumnValues(
-        lines,
-        telemetryHeaderIndex,
-        headspeedHeader
-      );
+  lines,
+  telemetryHeaderIndex,
+  headspeedHeader
+);
 
-      const governorTargetValues = getColumnValues(
-        lines,
-        telemetryHeaderIndex,
-        governorTargetHeader
-      );
+const headspeedSamples = getColumnSamples(
+  lines,
+  telemetryHeaderIndex,
+  headspeedHeader
+);
 
+const averageHeadspeed = getColumnAverage(
+  lines,
+  telemetryHeaderIndex,
+  headspeedHeader
+);
+
+const governorTargetValues = getColumnValues(
+  lines,
+  telemetryHeaderIndex,
+  governorTargetHeader
+);
+
+const governorTargetSamples = getColumnSamples(
+  lines,
+  telemetryHeaderIndex,
+  governorTargetHeader
+);
+
+const governorTargetByRow = new Map(
+  governorTargetSamples.map((sample) => [
+    sample.rowIndex,
+    sample.value
+  ])
+);
+
+const alignedHeadspeedSamples = headspeedSamples
+  .map((sample) => ({
+    rowIndex: sample.rowIndex,
+    measuredRpm: sample.value,
+    targetRpm: governorTargetByRow.get(sample.rowIndex)
+  }))
+  .filter((sample) =>
+    Number.isFinite(sample.measuredRpm) &&
+    Number.isFinite(sample.targetRpm)
+  );
+     
+const headspeedProfiles =
+  detectHeadspeedProfiles(
+    headspeedValues,
+    governorTargetValues,
+    alignedHeadspeedSamples
+  );
+
+console.log(
+  "Detected headspeed profiles:",
+  headspeedProfiles
+);
       const keyHeaders = [
         ["Time", findHeader(headers, ["time"])],
 
@@ -162,6 +307,8 @@ export function buildLogAnalysis({
   board,
   craftName,
   logStart,
+  averageHeadspeed,
+  headspeedProfiles,
   telemetryHeaderIndex,
   allColumns: headers,
   detectedTelemetry: {
@@ -188,9 +335,9 @@ export function buildLogAnalysis({
   }
 
 });
-filterAnalysis = analyzeFilters(
-  analysisContext,
-  lines
+    filterAnalysis = analyzeFilters(
+    analysisContext,
+    lines
 );
       flightAnalysis = buildFlightAnalysis(
         averageEscOutput,
@@ -404,6 +551,7 @@ filterAnalysis = analyzeFilters(
   extraSummary,
   telemetryText,
   analysisContext,
-  filterAnalysis
-};
-}
+  filterAnalysis,
+  filterAnalysisSummaryFindings: filterAnalysis?.summaryFindings ?? []
+  };
+  }

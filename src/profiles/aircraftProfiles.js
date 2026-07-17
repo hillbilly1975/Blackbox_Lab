@@ -7,6 +7,9 @@ const aircraftProfiles = {
     weightLb: 7.6,
     mainGearRatio: 11.17,
     tailRatio: 3.83,
+    mainBladeCount: 2,
+tailBladeCount: 2,
+motorPoleCount: 10,
     targetEscOutput: "78-80%",
     notes: "Scale Bell 222UT test bed"
   },
