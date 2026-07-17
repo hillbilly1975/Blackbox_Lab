@@ -15,6 +15,13 @@
       <button class="nav-button active">Home</button>
       <button class="nav-button" id="openLogButton">Open Blackbox Log</button>
       <button class="nav-button">Flight Analysis</button>
+      <button
+  class="nav-button"
+  id="filterLabButton"
+  onclick="document.getElementById('filterLabSection').scrollIntoView({ behavior: 'smooth' })"
+>
+  Filter Lab
+</button>
       <button class="nav-button">Governor Lab</button>
       <button class="nav-button">ESC Lab</button>
       <button class="nav-button">Battery Lab</button>
@@ -64,8 +71,8 @@
           </div>
         </div>
       </section>
-<section class="card" id="filterAnalysisCard">
-  <h3>Filter Analysis</h3>
+<section class="card" id="filterLabSection">
+  <h3>Filter Lab</h3>
 
   <div class="summary-grid">
     <div>
