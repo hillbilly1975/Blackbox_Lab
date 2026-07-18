@@ -6,6 +6,7 @@ export function updateScreen({
   extraSummary,
   telemetryColumns,
   filterAnalysis,
+  pidAnalysis,
   fileStatus,
   summaryFileName,
   summaryFileSize,
@@ -15,6 +16,11 @@ export function updateScreen({
   filterAnalysisConfidence,
   filterAnalysisFindings,
   filterAnalysisRecommendations,
+  pidAnalysisStatus,
+pidAnalysisScore,
+pidAnalysisConfidence,
+pidAnalysisFindings,
+pidAnalysisRecommendations,
   rawPreview,
   }) {
   telemetryColumns.textContent = telemetryText;
@@ -144,5 +150,36 @@ filterAnalysisFindings.innerHTML =
           .map((recommendation) => `<div>• ${recommendation}</div>`)
           .join("")
       : "No recommendations available.";
+      pidAnalysisStatus.textContent =
+  pidAnalysis?.status || "Unknown";
+
+pidAnalysisScore.textContent =
+  Number.isFinite(pidAnalysis?.score)
+    ? `${pidAnalysis.score}/100`
+    : "---";
+
+pidAnalysisConfidence.textContent =
+  pidAnalysis?.confidence
+    ? `${pidAnalysis.confidence.level} (${pidAnalysis.confidence.score}/100)`
+    : "---";
+
+pidAnalysisFindings.innerHTML =
+  Array.isArray(pidAnalysis?.findings) &&
+  pidAnalysis.findings.length > 0
+    ? pidAnalysis.findings
+        .map((finding) => `<div>• ${finding}</div>`)
+        .join("")
+    : "No findings available.";
+
+pidAnalysisRecommendations.innerHTML =
+  Array.isArray(pidAnalysis?.recommendations) &&
+  pidAnalysis.recommendations.length > 0
+    ? pidAnalysis.recommendations
+        .map(
+          (recommendation) =>
+            `<div>• ${recommendation}</div>`
+        )
+        .join("")
+    : "No recommendations available.";
 }
 }

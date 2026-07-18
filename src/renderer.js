@@ -46,6 +46,21 @@ const filterAnalysisRecommendations =
   document.getElementById("filterAnalysisRecommendations");
 
 
+const pidAnalysisStatus =
+  document.getElementById("pidAnalysisStatus");
+
+const pidAnalysisScore =
+  document.getElementById("pidAnalysisScore");
+
+const pidAnalysisConfidence =
+
+  document.getElementById("pidAnalysisConfidence");
+
+const pidAnalysisFindings =
+  document.getElementById("pidAnalysisFindings");
+
+const pidAnalysisRecommendations =
+  document.getElementById("pidAnalysisRecommendations");
 
 
 // ======================================================
@@ -154,7 +169,8 @@ const {
   extraSummary,
   telemetryText,
   analysisContext,
-  filterAnalysis
+  filterAnalysis,
+  pidAnalysis
 } = buildLogAnalysis({
   fileType,
   lines,
@@ -173,6 +189,7 @@ const {
   extraSummary,
   telemetryColumns,
    filterAnalysis,
+   pidAnalysis,
   fileStatus,
   summaryFileName,
   summaryFileSize,
@@ -182,6 +199,11 @@ const {
   filterAnalysisConfidence,
   filterAnalysisFindings,
   filterAnalysisRecommendations,
+  pidAnalysisStatus,
+pidAnalysisScore,
+pidAnalysisConfidence,
+pidAnalysisFindings,
+pidAnalysisRecommendations,
   rawPreview
   });
   });

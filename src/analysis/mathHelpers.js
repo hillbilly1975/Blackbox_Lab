@@ -118,3 +118,16 @@ export function getStandardDeviation(values) {
 export function clampScore(score) {
   return Math.max(0, Math.min(100, Math.round(score)));
 }
+
+export function calculateAverageAbsolute(values) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return null;
+  }
+
+  const total = values.reduce(
+    (sum, value) => sum + Math.abs(value),
+    0
+  );
+
+  return total / values.length;
+}

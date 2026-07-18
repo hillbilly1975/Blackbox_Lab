@@ -8,6 +8,7 @@ import {
   getColumnSamples
 } from "./mathHelpers.js";
 import { buildFlightAnalysis } from "./flightAnalysis.js";
+import { analyzePids } from "./pidAnalysis.js";
 import { analyzeFilters } from "./filterAnalysis.js";
 function detectHeadspeedProfiles(
   headspeedValues,
@@ -116,6 +117,7 @@ export function buildLogAnalysis({
   let telemetryText = "No telemetry found.";
   let analysisContext = null;
   let filterAnalysis = null;
+  let pidAnalysis = null;
   // ====================================================
   // BLACKBOX BBL LOG
   // ====================================================
@@ -339,6 +341,10 @@ console.log(
     analysisContext,
     lines
 );
+pidAnalysis = analyzePids(
+  analysisContext,
+  lines
+);
       flightAnalysis = buildFlightAnalysis(
         averageEscOutput,
         profile,
@@ -552,6 +558,7 @@ console.log(
   telemetryText,
   analysisContext,
   filterAnalysis,
+  pidAnalysis,
   filterAnalysisSummaryFindings: filterAnalysis?.summaryFindings ?? []
   };
   }
