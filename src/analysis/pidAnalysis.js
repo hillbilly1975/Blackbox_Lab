@@ -459,6 +459,68 @@ const bounceBackAmount =
   hasSufficientBounceBackWindow &&
   responseReachedTarget &&
   Number.isFinite(bounceBackPercent);
+  const settlingTolerance =
+  Number.isFinite(commandedResponseChange)
+    ? Math.max(
+        2,
+        Math.abs(commandedResponseChange) * 0.1
+      )
+    : null;
+    const settlingInToleranceFlags =
+  Number.isFinite(commandTarget) &&
+  Number.isFinite(settlingTolerance)
+    ? responseWindow.map((value) =>
+        Number.isFinite(value) &&
+        Math.abs(value - commandTarget) <=
+          settlingTolerance
+      )
+    : [];
+    const requiredSettledSamples = 20;
+    let settlingStartOffset = null;
+let consecutiveSettledSamples = 0;
+
+for (
+  let offset = 0;
+  offset < settlingInToleranceFlags.length;
+  offset += 1
+) {
+  if (settlingInToleranceFlags[offset]) {
+    consecutiveSettledSamples += 1;
+  } else {
+    consecutiveSettledSamples = 0;
+  }
+
+  if (
+    consecutiveSettledSamples >=
+    requiredSettledSamples
+  ) {
+    settlingStartOffset =
+      offset -
+      requiredSettledSamples +
+      1;
+
+    break;
+      }
+    }
+
+    const settlingSampleIndex =
+  Number.isInteger(settlingStartOffset)
+    ? responseWindowStart +
+      settlingStartOffset
+    : null;
+    const settlingDurationSamples =
+  Number.isInteger(settlingStartOffset)
+    ? settlingStartOffset
+    : null;
+    const settlingDetected =
+  Number.isInteger(settlingSampleIndex) &&
+  Number.isInteger(settlingDurationSamples);
+  const settlingEligible =
+  !hasOverlappingCommand &&
+  settlingDetected &&
+  Math.abs(commandedResponseChange) >= 10;
+  
+
 events.push({
   axis: axisNames[axisIndex] ?? `Axis ${axisIndex}`,
   sampleIndex,
@@ -481,6 +543,14 @@ bounceBackExtreme,
 bounceBackAmount,
 bounceBackPercent,
 bounceBackEligible,
+settlingTolerance,
+settlingInToleranceFlags,
+requiredSettledSamples,
+settlingStartOffset,
+settlingSampleIndex,
+settlingDurationSamples,
+settlingDetected,
+settlingEligible,
   responseWindowStart,
   responseWindowEnd,
   responseWindow,
@@ -996,7 +1066,151 @@ return [
     : `${axisResult.axis} highest bounce-back event details: Unavailable`
 ];
 }),
+...commandEvents.flatMap((axisResult) => {
+  const validSettlingEvents =
+    axisResult.events.filter((event) =>
+      event?.settlingEligible === true &&
+      Number.isFinite(
+        event?.settlingDurationSamples
+      )
+    );
 
+  const settlingDurationSamples =
+    validSettlingEvents.map(
+      (event) => event.settlingDurationSamples
+    );
+const averageSettlingDurationSamples =
+  settlingDurationSamples.length > 0
+    ? settlingDurationSamples.reduce(
+        (sum, value) => sum + value,
+        0
+      ) / settlingDurationSamples.length
+    : null;
+    const sortedSettlingDurationSamples =
+  [...settlingDurationSamples].sort(
+    (a, b) => a - b
+  );
+
+const medianSettlingDurationSamples =
+  sortedSettlingDurationSamples.length > 0
+    ? sortedSettlingDurationSamples.length % 2 === 1
+      ? sortedSettlingDurationSamples[
+          Math.floor(
+            sortedSettlingDurationSamples.length / 2
+          )
+        ]
+      : (
+          sortedSettlingDurationSamples[
+            sortedSettlingDurationSamples.length / 2 - 1
+          ] +
+          sortedSettlingDurationSamples[
+            sortedSettlingDurationSamples.length / 2
+          ]
+        ) / 2
+    : null;
+    const maximumSettlingDurationSamples =
+  settlingDurationSamples.length > 0
+    ? Math.max(...settlingDurationSamples)
+    : null;
+    const trimmedSettlingDurationSamples =
+  sortedSettlingDurationSamples.length >= 4
+    ? sortedSettlingDurationSamples.slice(0, -1)
+    : sortedSettlingDurationSamples;
+
+const trimmedMaximumSettlingDurationSamples =
+  trimmedSettlingDurationSamples.length > 0
+    ? Math.max(...trimmedSettlingDurationSamples)
+    : null;
+    const highestSettlingDurationEvent =
+  validSettlingEvents.reduce(
+    (highestEvent, event) => {
+      if (
+        !highestEvent ||
+        event.settlingDurationSamples >
+          highestEvent.settlingDurationSamples
+      ) {
+        return event;
+      }
+
+      return highestEvent;
+    },
+    null
+  );
+  const settlingConfidence =
+  validSettlingEvents.length >= 5
+    ? "High"
+    : validSettlingEvents.length >= 3
+      ? "Medium"
+      : validSettlingEvents.length >= 2
+        ? "Low"
+        : "Insufficient";
+        const settlingRecommendation =
+  settlingConfidence === "Insufficient" ||
+  settlingConfidence === "Low"
+    ? `Collect more clean ${axisResult.axis} command events before evaluating settling behavior.`
+    : Number.isFinite(
+        medianSettlingDurationSamples
+      ) &&
+        medianSettlingDurationSamples >= 100
+      ? `Review ${axisResult.axis} for slow settling after command changes. Confirm the pattern with another log before changing PID values.`
+      : `No repeated slow-settling pattern was identified for ${axisResult.axis}.`;
+      const settlingStatus =
+  settlingConfidence === "Insufficient" ||
+  settlingConfidence === "Low"
+    ? "Insufficient Data"
+    : Number.isFinite(
+        medianSettlingDurationSamples
+      ) &&
+        medianSettlingDurationSamples >= 100
+      ? "Review"
+      : "Clear";
+  return [
+  `${axisResult.axis} settling status: ${settlingStatus}`,
+  `${axisResult.axis} settling confidence: ${settlingConfidence}`,
+  `${axisResult.axis} settling evidence: ${validSettlingEvents.length} valid event${
+    validSettlingEvents.length === 1 ? "" : "s"
+  }`,
+  
+  `${axisResult.axis} settling recommendation: ${settlingRecommendation}`,
+  `${axisResult.axis} average settling duration: ${
+  Number.isFinite(averageSettlingDurationSamples)
+    ? averageSettlingDurationSamples.toFixed(2)
+    : "Unavailable"
+} samples`,
+
+`${axisResult.axis} median settling duration: ${
+  Number.isFinite(medianSettlingDurationSamples)
+    ? medianSettlingDurationSamples.toFixed(2)
+    : "Unavailable"
+} samples`,
+`${axisResult.axis} trimmed maximum settling duration: ${
+  Number.isFinite(trimmedMaximumSettlingDurationSamples)
+    ? trimmedMaximumSettlingDurationSamples.toFixed(2)
+    : "Unavailable"
+} samples`,
+
+`${axisResult.axis} raw maximum settling duration: ${
+  Number.isFinite(maximumSettlingDurationSamples)
+    ? maximumSettlingDurationSamples.toFixed(2)
+    : "Unavailable"
+} samples`,
+highestSettlingDurationEvent
+  ? `${axisResult.axis} slowest settling event details — sample: ${highestSettlingDurationEvent.sampleIndex}, command end: ${highestSettlingDurationEvent.commandEndSampleIndex}, target: ${
+      Number.isFinite(highestSettlingDurationEvent.commandTarget)
+        ? highestSettlingDurationEvent.commandTarget.toFixed(2)
+        : "Unavailable"
+    }, settling start: ${
+      Number.isInteger(highestSettlingDurationEvent.settlingSampleIndex)
+        ? highestSettlingDurationEvent.settlingSampleIndex
+        : "Unavailable"
+    }, duration: ${
+      Number.isFinite(highestSettlingDurationEvent.settlingDurationSamples)
+        ? highestSettlingDurationEvent.settlingDurationSamples.toFixed(2)
+        : "Unavailable"
+    } samples`
+  : `${axisResult.axis} slowest settling event details: Unavailable`
+];
+}),
 highestTrackingErrorAxis
   ? `${highestTrackingErrorAxis.axis} has the highest average tracking error at ${highestTrackingErrorAxis.averageAbsoluteError.toFixed(2)}. This axis deserves the closest review during PID tuning.`
   : "A highest tracking-error axis could not be identified.",
