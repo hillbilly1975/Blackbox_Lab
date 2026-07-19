@@ -123,11 +123,53 @@ export function calculateAverageAbsolute(values) {
   if (!Array.isArray(values) || values.length === 0) {
     return null;
   }
-
   const total = values.reduce(
-    (sum, value) => sum + Math.abs(value),
-    0
-  );
+  (sum, value) => sum + Math.abs(value),
+  0
+);
 
-  return total / values.length;
+return total / values.length;
 }
+export function getColumnValuesByRowIndexes(
+  lines,
+  headerIndex,
+  columnName,
+  rowIndexes
+) {
+  if (
+    !Array.isArray(lines) ||
+    !Array.isArray(rowIndexes) ||
+    !columnName ||
+    headerIndex < 0
+  ) {
+    return [];
+  }
+
+  const headers = lines[headerIndex]
+    .split(",")
+    .map((header) => header.trim());
+
+  const columnIndex = headers.indexOf(columnName);
+
+  if (columnIndex < 0) {
+    return [];
+  }
+
+  return rowIndexes
+    .map((rowIndex) => {
+      const line = lines[rowIndex];
+
+      if (!line) {
+        return null;
+      }
+
+      const cells = line.split(",");
+      const value = Number(cells[columnIndex]);
+
+      return Number.isFinite(value)
+        ? value
+        : null;
+    })
+    .filter((value) => Number.isFinite(value));
+}
+  

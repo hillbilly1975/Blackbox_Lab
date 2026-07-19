@@ -343,7 +343,8 @@ console.log(
 );
 pidAnalysis = analyzePids(
   analysisContext,
-  lines
+  lines,
+  filterAnalysis?.profileSpecificFilterAnalysis ?? []
 );
       flightAnalysis = buildFlightAnalysis(
         averageEscOutput,
