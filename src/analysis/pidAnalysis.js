@@ -391,6 +391,74 @@ const overshootPercent =
         Math.abs(commandedResponseChange)
       ) * 100
     : null;
+    const bounceBackWindowStart =
+  Number.isInteger(responsePeakSampleIndex)
+    ? responsePeakSampleIndex + 1
+    : null;
+
+const bounceBackWindow =
+  Number.isInteger(bounceBackWindowStart) &&
+  responseResult
+    ? responseResult.values.slice(
+        bounceBackWindowStart,
+        responseWindowEnd
+      )
+    : [];
+
+const validBounceBackWindow =
+  bounceBackWindow.filter((value) =>
+    Number.isFinite(value)
+  );
+  const bounceBackSampleCount =
+  validBounceBackWindow.length;
+
+const hasSufficientBounceBackWindow =
+  bounceBackSampleCount >= 3;
+  const bounceBackExtreme =
+  hasSufficientBounceBackWindow
+    ? commandDirection > 0
+      ? Math.min(...validBounceBackWindow)
+      : Math.max(...validBounceBackWindow)
+    : null;
+
+    const responseReachedTarget =
+  Number.isFinite(responsePeak) &&
+  Number.isFinite(commandTarget)
+    ? commandDirection > 0
+      ? responsePeak >= commandTarget
+      : responsePeak <= commandTarget
+    : false;
+
+const bounceBackAmount =
+  responseReachedTarget &&
+  Number.isFinite(commandTarget) &&
+  Number.isFinite(bounceBackExtreme)
+    ? commandDirection > 0
+      ? Math.max(
+          0,
+          commandTarget - bounceBackExtreme
+        )
+      : Math.max(
+          0,
+          bounceBackExtreme - commandTarget
+        )
+    : null;
+
+
+    const bounceBackPercent =
+  hasSufficientBounceBackWindow &&
+  responseReachedTarget &&
+  Number.isFinite(bounceBackAmount) &&
+  Math.abs(commandedResponseChange) >= 10
+    ? (
+        bounceBackAmount /
+        Math.abs(commandedResponseChange)
+      ) * 100
+    : null;
+    const bounceBackEligible =
+  hasSufficientBounceBackWindow &&
+  responseReachedTarget &&
+  Number.isFinite(bounceBackPercent);
 events.push({
   axis: axisNames[axisIndex] ?? `Axis ${axisIndex}`,
   sampleIndex,
@@ -404,6 +472,15 @@ commandDirection,
 responsePeakInCommandDirection,
 overshootAmount,
 overshootPercent,
+bounceBackWindowStart,
+bounceBackWindow,
+validBounceBackWindow,
+bounceBackSampleCount,
+hasSufficientBounceBackWindow,
+bounceBackExtreme,
+bounceBackAmount,
+bounceBackPercent,
+bounceBackEligible,
   responseWindowStart,
   responseWindowEnd,
   responseWindow,
@@ -772,7 +849,154 @@ highestOvershootEvent
   : `${axisResult.axis} highest overshoot event details: Unavailable`
 ];
 }),
- 
+ ...commandEvents.flatMap((axisResult) => {
+  const validBounceBackEvents =
+    axisResult.events.filter((event) =>
+      event?.bounceBackEligible === true &&
+      Number.isFinite(event?.bounceBackPercent)
+    );
+
+  const bounceBackPercentValues =
+    validBounceBackEvents.map(
+      (event) => event.bounceBackPercent
+    );
+const averageBounceBackPercent =
+  bounceBackPercentValues.length > 0
+    ? bounceBackPercentValues.reduce(
+        (sum, value) => sum + value,
+        0
+      ) / bounceBackPercentValues.length
+    : null;
+    const sortedBounceBackPercentValues =
+  [...bounceBackPercentValues].sort(
+    (a, b) => a - b
+  );
+
+const medianBounceBackPercent =
+sortedBounceBackPercentValues.length > 0
+    ? sortedBounceBackPercentValues.length % 2 === 1
+      ? sortedBounceBackPercentValues[
+          Math.floor(
+            sortedBounceBackPercentValues.length / 2
+          )
+        ]
+      : (
+          sortedBounceBackPercentValues[
+            sortedBounceBackPercentValues.length / 2 - 1
+          ] +
+          sortedBounceBackPercentValues[
+            sortedBounceBackPercentValues.length / 2
+          ]
+        ) / 2
+    : null;
+    const maximumBounceBackPercent =
+  bounceBackPercentValues.length > 0
+    ? Math.max(...bounceBackPercentValues)
+    : null;
+  
+  const trimmedBounceBackPercentValues =
+  sortedBounceBackPercentValues.length >= 4
+    ? sortedBounceBackPercentValues.slice(0, -1)
+    : sortedBounceBackPercentValues;
+
+const trimmedMaximumBounceBackPercent =
+  trimmedBounceBackPercentValues.length > 0
+    ? Math.max(...trimmedBounceBackPercentValues)
+    : null;
+    const highestBounceBackEvent =
+  validBounceBackEvents.reduce(
+    (highestEvent, event) => {
+      if (
+        !highestEvent ||
+        event.bounceBackPercent >
+          highestEvent.bounceBackPercent
+      ) {
+        return event;
+      }
+
+      return highestEvent;
+    },
+    null
+    );
+    const bounceBackConfidence =
+  validBounceBackEvents.length >= 5
+    ? "High"
+    : validBounceBackEvents.length >= 3
+      ? "Medium"
+      : validBounceBackEvents.length >= 2
+        ? "Low"
+        : "Insufficient";
+        const bounceBackRecommendation =
+  bounceBackConfidence === "Insufficient" ||
+  bounceBackConfidence === "Low"
+    ? `Collect more clean ${axisResult.axis} command events before evaluating bounce-back.`
+    : Number.isFinite(medianBounceBackPercent) &&
+        medianBounceBackPercent >= 15
+      ? `Review ${axisResult.axis} for repeated response reversal after command peaks. Confirm the pattern before changing PID gains.`
+      : `No repeated ${axisResult.axis} bounce-back pattern was identified from the valid command events.`;
+      const bounceBackStatus =
+  bounceBackConfidence === "Insufficient" ||
+  bounceBackConfidence === "Low"
+    ? "Insufficient Data"
+    : Number.isFinite(medianBounceBackPercent) &&
+        medianBounceBackPercent >= 15
+      ? "Review"
+      : "Clear";
+return [
+  `${axisResult.axis} events with valid bounce-back measurements: ${validBounceBackEvents.length}`,
+  `${axisResult.axis} bounce-back status: ${bounceBackStatus}`,
+  `${axisResult.axis} bounce-back confidence: ${bounceBackConfidence}`,
+  `${axisResult.axis} bounce-back evidence: ${validBounceBackEvents.length} valid event${
+  validBounceBackEvents.length === 1 ? "" : "s"
+}`,
+  `${axisResult.axis} bounce-back recommendation: ${bounceBackRecommendation}`,
+
+  `${axisResult.axis} average event bounce-back: ${
+    Number.isFinite(averageBounceBackPercent)
+      ? averageBounceBackPercent.toFixed(2)
+      : "Unavailable"
+  }%`,
+
+  `${axisResult.axis} median event bounce-back: ${
+    Number.isFinite(medianBounceBackPercent)
+      ? medianBounceBackPercent.toFixed(2)
+      : "Unavailable"
+  }%`,
+
+  `${axisResult.axis} trimmed maximum event bounce-back: ${
+    Number.isFinite(trimmedMaximumBounceBackPercent)
+      ? trimmedMaximumBounceBackPercent.toFixed(2)
+      : "Unavailable"
+  }%`,
+
+  `${axisResult.axis} raw maximum event bounce-back: ${
+    Number.isFinite(maximumBounceBackPercent)
+      ? maximumBounceBackPercent.toFixed(2)
+      : "Unavailable"
+  }%`,
+
+  highestBounceBackEvent
+    ? `${axisResult.axis} highest bounce-back event details — sample: ${highestBounceBackEvent.sampleIndex}, target: ${
+        Number.isFinite(highestBounceBackEvent.commandTarget)
+          ? highestBounceBackEvent.commandTarget.toFixed(2)
+          : "Unavailable"
+      }, response peak: ${
+        Number.isFinite(highestBounceBackEvent.responsePeak)
+          ? highestBounceBackEvent.responsePeak.toFixed(2)
+          : "Unavailable"
+      }, bounce-back extreme: ${
+        Number.isFinite(highestBounceBackEvent.bounceBackExtreme)
+          ? highestBounceBackEvent.bounceBackExtreme.toFixed(2)
+          : "Unavailable"
+      }, bounce-back: ${
+        Number.isFinite(highestBounceBackEvent.bounceBackPercent)
+          ? highestBounceBackEvent.bounceBackPercent.toFixed(2)
+          : "Unavailable"
+      }%`
+    : `${axisResult.axis} highest bounce-back event details: Unavailable`
+];
+}),
+
 highestTrackingErrorAxis
   ? `${highestTrackingErrorAxis.axis} has the highest average tracking error at ${highestTrackingErrorAxis.averageAbsoluteError.toFixed(2)}. This axis deserves the closest review during PID tuning.`
   : "A highest tracking-error axis could not be identified.",
