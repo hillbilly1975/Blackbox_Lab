@@ -734,6 +734,385 @@ const pidColumns = findMatchingColumns(
    
 const groupedPidColumns =
   groupPidColumns(pidColumns);
+  const pidTermValues = {
+  p: groupedPidColumns.p.map(
+    (columnName, axisIndex) => ({
+      axis:
+        axisNames[axisIndex] ??
+        `Axis ${axisIndex}`,
+      columnName,
+      values: getColumnValues(
+        lines,
+        telemetryHeaderIndex,
+        columnName
+      )
+    })
+  ),
+
+  i: groupedPidColumns.i.map(
+    (columnName, axisIndex) => ({
+      axis:
+        axisNames[axisIndex] ??
+        `Axis ${axisIndex}`,
+      columnName,
+      values: getColumnValues(
+        lines,
+        telemetryHeaderIndex,
+        columnName
+      )
+    })
+  ),
+
+  d: groupedPidColumns.d.map(
+    (columnName, axisIndex) => ({
+      axis:
+        axisNames[axisIndex] ??
+        `Axis ${axisIndex}`,
+      columnName,
+      values: getColumnValues(
+        lines,
+        telemetryHeaderIndex,
+        columnName
+      )
+    })
+  ),
+
+  feedforward:
+    groupedPidColumns.feedforward.map(
+      (columnName, axisIndex) => ({
+        axis:
+          axisNames[axisIndex] ??
+          `Axis ${axisIndex}`,
+        columnName,
+        values: getColumnValues(
+          lines,
+          telemetryHeaderIndex,
+          columnName
+        )
+      })
+    )
+};
+const pidTermAverageAbsolute = {
+  p: pidTermValues.p.map((termResult) => ({
+    axis: termResult.axis,
+    columnName: termResult.columnName,
+    sampleCount: termResult.values.length,
+    averageAbsolute:
+      calculateAverageAbsolute(termResult.values)
+  })),
+
+  i: pidTermValues.i.map((termResult) => ({
+    axis: termResult.axis,
+    columnName: termResult.columnName,
+    sampleCount: termResult.values.length,
+    averageAbsolute:
+      calculateAverageAbsolute(termResult.values)
+  })),
+
+  d: pidTermValues.d.map((termResult) => ({
+    axis: termResult.axis,
+    columnName: termResult.columnName,
+    sampleCount: termResult.values.length,
+    averageAbsolute:
+      calculateAverageAbsolute(termResult.values)
+  })),
+
+  feedforward:
+    pidTermValues.feedforward.map(
+      (termResult) => ({
+        axis: termResult.axis,
+        columnName: termResult.columnName,
+        sampleCount: termResult.values.length,
+        averageAbsolute:
+          calculateAverageAbsolute(
+            termResult.values
+          )
+      })
+    )
+};
+const pidCommandWindowsByAxis =
+  commandEvents.map((axisResult, axisIndex) => ({
+    axis: axisResult.axis,
+    axisIndex,
+    windows: axisResult.events
+      .filter(
+        (event) =>
+          Number.isInteger(
+            event?.responseWindowStart
+          ) &&
+          Number.isInteger(
+            event?.responseWindowEnd
+          ) &&
+          event.responseWindowEnd >=
+            event.responseWindowStart
+      )
+      .map((event) => ({
+        startSampleIndex:
+          event.responseWindowStart,
+        endSampleIndex:
+          event.responseWindowEnd
+      }))
+  }));
+const getValuesFromCommandWindows = (
+  values,
+  windows
+) => {
+  const commandValues = [];
+
+  for (const window of windows) {
+    const startSampleIndex =
+      Math.max(0, window.startSampleIndex);
+
+    const endSampleIndex =
+      Math.min(
+        values.length - 1,
+        window.endSampleIndex
+      );
+
+    for (
+      let sampleIndex = startSampleIndex;
+      sampleIndex <= endSampleIndex;
+      sampleIndex += 1
+    ) {
+      const value = values[sampleIndex];
+
+      if (Number.isFinite(value)) {
+        commandValues.push(value);
+      }
+    }
+  }
+
+  return commandValues;
+};
+const pidCommandTermAverageAbsolute =
+  axisNames.map((axis, axisIndex) => {
+    const windows =
+      pidCommandWindowsByAxis[axisIndex]
+        ?.windows ?? [];
+
+    const pValues =
+      getValuesFromCommandWindows(
+        pidTermValues.p[axisIndex]?.values ?? [],
+        windows
+      );
+
+    const iValues =
+      getValuesFromCommandWindows(
+        pidTermValues.i[axisIndex]?.values ?? [],
+        windows
+      );
+
+    const dValues =
+      getValuesFromCommandWindows(
+        pidTermValues.d[axisIndex]?.values ?? [],
+        windows
+      );
+
+    const feedforwardValues =
+      getValuesFromCommandWindows(
+        pidTermValues.feedforward[axisIndex]
+          ?.values ?? [],
+        windows
+      );
+
+    return {
+      axis,
+      commandWindowCount: windows.length,
+      pSampleCount: pValues.length,
+      iSampleCount: iValues.length,
+      dSampleCount: dValues.length,
+      feedforwardSampleCount:
+        feedforwardValues.length,
+      pAverage:
+        calculateAverageAbsolute(pValues),
+      iAverage:
+        calculateAverageAbsolute(iValues),
+      dAverage:
+        calculateAverageAbsolute(dValues),
+      feedforwardAverage:
+        calculateAverageAbsolute(
+          feedforwardValues
+        )
+    };
+  });
+  const pidCommandTermContributionPercentages =
+  pidCommandTermAverageAbsolute.map(
+    (axisResult) => {
+      const validTermAverages = [
+        axisResult.pAverage,
+        axisResult.iAverage,
+        axisResult.dAverage,
+        axisResult.feedforwardAverage
+      ].filter((value) =>
+        Number.isFinite(value)
+      );
+      
+
+      
+
+      const totalCommandActivity =
+        validTermAverages.length > 0
+          ? validTermAverages.reduce(
+              (sum, value) => sum + value,
+              0
+            )
+          : null;
+
+      const calculatePercent = (value) =>
+        Number.isFinite(value) &&
+        Number.isFinite(totalCommandActivity) &&
+        totalCommandActivity > 0
+          ? (
+              value /
+              totalCommandActivity
+            ) * 100
+          : null;
+
+      return {
+        ...axisResult,
+        totalCommandActivity,
+        pPercent:
+          calculatePercent(axisResult.pAverage),
+        iPercent:
+          calculatePercent(axisResult.iAverage),
+        dPercent:
+          calculatePercent(axisResult.dAverage),
+        feedforwardPercent:
+          calculatePercent(
+            axisResult.feedforwardAverage
+          )
+      };
+    }
+  );
+
+const pidTermContributionByAxis =
+  axisNames.map((axis, axisIndex) => {
+    const pAverage =
+      pidTermAverageAbsolute.p[axisIndex]
+        ?.averageAbsolute ?? null;
+
+    const iAverage =
+      pidTermAverageAbsolute.i[axisIndex]
+        ?.averageAbsolute ?? null;
+
+    const dAverage =
+      pidTermAverageAbsolute.d[axisIndex]
+        ?.averageAbsolute ?? null;
+
+    const feedforwardAverage =
+      pidTermAverageAbsolute.feedforward[
+        axisIndex
+      ]?.averageAbsolute ?? null;
+
+    return {
+      axis,
+      pAverage,
+      iAverage,
+      dAverage,
+      feedforwardAverage
+    };
+  });
+  const pidTermContributionTotals =
+  pidTermContributionByAxis.map((axisResult) => {
+    const validTermAverages = [
+      axisResult.pAverage,
+      axisResult.iAverage,
+      axisResult.dAverage,
+      axisResult.feedforwardAverage
+    ].filter((value) =>
+      Number.isFinite(value)
+    );
+
+    const totalAverageActivity =
+      validTermAverages.length > 0
+        ? validTermAverages.reduce(
+            (sum, value) => sum + value,
+            0
+          )
+        : null;
+
+    return {
+      ...axisResult,
+      totalAverageActivity
+    };
+  });
+  const pidTermContributionPercentages =
+  pidTermContributionTotals.map((axisResult) => {
+    const total =
+      axisResult.totalAverageActivity;
+
+    const calculatePercent = (value) =>
+      Number.isFinite(value) &&
+      Number.isFinite(total) &&
+      total > 0
+        ? (value / total) * 100
+        : null;
+
+    return {
+      ...axisResult,
+      pPercent:
+        calculatePercent(axisResult.pAverage),
+      iPercent:
+        calculatePercent(axisResult.iAverage),
+      dPercent:
+        calculatePercent(axisResult.dAverage),
+      feedforwardPercent:
+        calculatePercent(
+          axisResult.feedforwardAverage
+        )
+    };
+  });
+  const dominantPidTermByAxis =
+  pidTermContributionPercentages.map(
+    (axisResult) => {
+      const termPercentages = [
+        {
+          term: "P",
+          percent: axisResult.pPercent
+        },
+        {
+          term: "I",
+          percent: axisResult.iPercent
+        },
+        {
+          term: "D",
+          percent: axisResult.dPercent
+        },
+        {
+          term: "Feedforward",
+          percent:
+            axisResult.feedforwardPercent
+        }
+      ].filter((termResult) =>
+        Number.isFinite(termResult.percent)
+      );
+
+      const dominantTerm =
+        termPercentages.reduce(
+          (highest, termResult) => {
+            if (
+              !highest ||
+              termResult.percent >
+                highest.percent
+            ) {
+              return termResult;
+            }
+
+            return highest;
+          },
+          null
+        );
+
+      return {
+        axis: axisResult.axis,
+        dominantTerm:
+          dominantTerm?.term ?? null,
+        dominantPercent:
+          dominantTerm?.percent ?? null
+      };
+    }
+  );
+
   const validAxisCount =
   averageAbsoluteAxisError.filter(
     (axisResult) =>
@@ -796,6 +1175,50 @@ const confidenceLevel =
     },
     null
   );
+  const pidCommandBalanceAssessment =
+  pidCommandTermContributionPercentages.map(
+    (axisResult) => {
+      const hasUsableContributionData =
+        axisResult.commandWindowCount >= 3 &&
+        Number.isFinite(axisResult.iPercent) &&
+        Number.isFinite(axisResult.pPercent) &&
+        Number.isFinite(
+          axisResult.feedforwardPercent
+        );
+
+      const isHighestTrackingErrorAxis =
+        highestTrackingErrorAxis?.axis ===
+        axisResult.axis;
+
+      const iRemainsDominantDuringCommands =
+        axisResult.iPercent >= 65;
+
+      const commandSupportIsLow =
+        axisResult.pPercent +
+          axisResult.feedforwardPercent <
+        35;
+
+      const status =
+        !hasUsableContributionData
+          ? "Insufficient Data"
+          : isHighestTrackingErrorAxis &&
+              iRemainsDominantDuringCommands &&
+              commandSupportIsLow
+            ? "Review"
+            : "Clear";
+
+      return {
+        axis: axisResult.axis,
+        status,
+        commandWindowCount:
+          axisResult.commandWindowCount,
+        isHighestTrackingErrorAxis,
+        iRemainsDominantDuringCommands,
+        commandSupportIsLow
+      };
+    }
+  );
+ 
   return {
     status: "PID Tracking Analysis Complete",
     score: null,
@@ -1439,6 +1862,79 @@ bestTrackingProfile
 worstTrackingProfile
   ? `${worstTrackingProfile.targetRpm} RPM has the highest overall tracking error at ${worstTrackingProfile.averageTrackingError.toFixed(2)}.`
   : "A worst tracking profile could not be identified.",
+  ...pidCommandTermContributionPercentages.map(
+  (axisResult) =>
+    `${axisResult.axis} command-event PID contribution from ${
+      axisResult.commandWindowCount
+    } window${
+      axisResult.commandWindowCount === 1 ? "" : "s"
+    } — P: ${
+      Number.isFinite(axisResult.pPercent)
+        ? axisResult.pPercent.toFixed(2)
+        : "Unavailable"
+    }%, I: ${
+      Number.isFinite(axisResult.iPercent)
+        ? axisResult.iPercent.toFixed(2)
+        : "Unavailable"
+    }%, D: ${
+      Number.isFinite(axisResult.dPercent)
+        ? axisResult.dPercent.toFixed(2)
+        : "Unavailable"
+    }%, Feedforward: ${
+      Number.isFinite(axisResult.feedforwardPercent)
+        ? axisResult.feedforwardPercent.toFixed(2)
+        : "Unavailable"
+    }%`
+),
+...pidCommandBalanceAssessment.map(
+  (axisResult) =>
+    `${axisResult.axis} command-balance status: ${
+      axisResult.status
+    } from ${
+      axisResult.commandWindowCount
+    } command window${
+      axisResult.commandWindowCount === 1 ? "" : "s"
+    }`
+),
+...pidCommandBalanceAssessment.map(
+  (axisResult) =>
+    axisResult.status === "Review"
+      ? `${axisResult.axis} command-balance finding: I remains dominant during command events while P plus feedforward support stays below 35%, and this axis also has the highest tracking error. Review setpoint, axis error, feedforward, and I behavior together before changing any PID value.`
+      : axisResult.status === "Clear"
+        ? `${axisResult.axis} command-balance finding: No combined tracking-error and command-support concern was identified.`
+        : `${axisResult.axis} command-balance finding: More usable command windows are required before evaluating PID-term balance.`
+),
+  ...pidTermContributionPercentages.map(
+  (axisResult) =>
+    `${axisResult.axis} PID-term contribution — P: ${
+      Number.isFinite(axisResult.pPercent)
+        ? axisResult.pPercent.toFixed(2)
+        : "Unavailable"
+    }%, I: ${
+      Number.isFinite(axisResult.iPercent)
+        ? axisResult.iPercent.toFixed(2)
+        : "Unavailable"
+    }%, D: ${
+      Number.isFinite(axisResult.dPercent)
+        ? axisResult.dPercent.toFixed(2)
+        : "Unavailable"
+    }%, Feedforward: ${
+      Number.isFinite(axisResult.feedforwardPercent)
+        ? axisResult.feedforwardPercent.toFixed(2)
+        : "Unavailable"
+    }%`
+),
+
+...dominantPidTermByAxis.map(
+  (axisResult) =>
+    `${axisResult.axis} dominant PID term: ${
+      axisResult.dominantTerm ?? "Unavailable"
+    } at ${
+      Number.isFinite(axisResult.dominantPercent)
+        ? axisResult.dominantPercent.toFixed(2)
+        : "Unavailable"
+    }%`
+),
      `P-term columns detected: ${groupedPidColumns.p.length}`,
       `P-term column names: ${groupedPidColumns.p.join(", ")}`,
       `Axis setpoint column names: ${axisSetpointColumns.join(", ")}`,
@@ -1448,6 +1944,15 @@ worstTrackingProfile
 `PID-sum columns detected: ${groupedPidColumns.pidSum.length}`
     ],
     recommendations: [
+      ...pidCommandBalanceAssessment
+  .filter(
+    (axisResult) =>
+      axisResult.status === "Review"
+  )
+  .map(
+    (axisResult) =>
+      `Review ${axisResult.axis} command balance before changing PID values. I remains dominant during command events while P plus feedforward support stays below 35%, and this axis also has the highest tracking error. Compare setpoint, axis error, feedforward, and I behavior together.`
+  ),
   highestTrackingErrorAxis
     ? `Review ${highestTrackingErrorAxis.axis} first during PID tuning. Compare its setpoint, axis error, and P/I/D/feedforward response before changing any values.`
     : "Collect a log with valid Roll, Pitch, and Yaw tracking data before making PID changes.",
