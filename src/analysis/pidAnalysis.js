@@ -519,7 +519,60 @@ for (
   !hasOverlappingCommand &&
   settlingDetected &&
   Math.abs(commandedResponseChange) >= 10;
-  
+  const ringingErrorWindow =
+  Number.isFinite(commandTarget)
+    ? bounceBackWindow.map((value) =>
+        Number.isFinite(value)
+          ? value - commandTarget
+          : null
+      )
+    : [];
+    const ringingNoiseThreshold =
+  Number.isFinite(settlingTolerance)
+    ? Math.max(
+        1,
+        settlingTolerance * 0.5
+      )
+    : 1;
+
+const significantRingingErrorWindow =
+  ringingErrorWindow.map((error) =>
+    Number.isFinite(error) &&
+    Math.abs(error) >= ringingNoiseThreshold
+      ? error
+      : 0
+  );
+  let ringingTargetCrossingCount = 0;
+let previousRingingSign = 0;
+
+for (
+  const error of significantRingingErrorWindow
+) {
+  const currentRingingSign = Math.sign(error);
+
+  if (currentRingingSign === 0) {
+    continue;
+  }
+
+  if (
+    previousRingingSign !== 0 &&
+    currentRingingSign !== previousRingingSign
+  ) {
+    ringingTargetCrossingCount += 1;
+  }
+
+  previousRingingSign = currentRingingSign;
+}
+  const ringingSampleCount =
+  significantRingingErrorWindow.length;
+
+const hasSufficientRingingWindow =
+  ringingSampleCount >= 20;
+  const ringingEligible =
+  !hasOverlappingCommand &&
+  hasSufficientRingingWindow &&
+  Math.abs(commandedResponseChange) >= 10;
+
 
 events.push({
   axis: axisNames[axisIndex] ?? `Axis ${axisIndex}`,
@@ -551,6 +604,13 @@ settlingSampleIndex,
 settlingDurationSamples,
 settlingDetected,
 settlingEligible,
+ringingErrorWindow,
+ringingNoiseThreshold,
+significantRingingErrorWindow,
+ringingTargetCrossingCount,
+ringingSampleCount,
+hasSufficientRingingWindow,
+ringingEligible,
   responseWindowStart,
   responseWindowEnd,
   responseWindow,
@@ -1209,6 +1269,152 @@ highestSettlingDurationEvent
         : "Unavailable"
     } samples`
   : `${axisResult.axis} slowest settling event details: Unavailable`
+];
+}),
+...commandEvents.flatMap((axisResult) => {
+  const validRingingEvents =
+    axisResult.events.filter((event) =>
+      event?.ringingEligible === true &&
+      Number.isFinite(
+        event?.ringingTargetCrossingCount
+      )
+    );
+
+  const ringingCrossingCounts =
+    validRingingEvents.map(
+      (event) =>
+        event.ringingTargetCrossingCount
+    );
+
+const averageRingingCrossingCount =
+  ringingCrossingCounts.length > 0
+    ? ringingCrossingCounts.reduce(
+        (sum, value) => sum + value,
+        0
+      ) / ringingCrossingCounts.length
+    : null;
+    const sortedRingingCrossingCounts =
+  [...ringingCrossingCounts].sort(
+    (a, b) => a - b
+  );
+
+const medianRingingCrossingCount =
+  sortedRingingCrossingCounts.length > 0
+    ? sortedRingingCrossingCounts.length % 2 === 1
+      ? sortedRingingCrossingCounts[
+          Math.floor(
+            sortedRingingCrossingCounts.length / 2
+          )
+        ]
+      : (
+          sortedRingingCrossingCounts[
+            sortedRingingCrossingCounts.length / 2 - 1
+          ] +
+          sortedRingingCrossingCounts[
+            sortedRingingCrossingCounts.length / 2
+          ]
+        ) / 2
+    : null;
+    const maximumRingingCrossingCount =
+  ringingCrossingCounts.length > 0
+    ? Math.max(...ringingCrossingCounts)
+    : null;
+    const trimmedRingingCrossingCounts =
+  sortedRingingCrossingCounts.length >= 4
+    ? sortedRingingCrossingCounts.slice(0, -1)
+    : sortedRingingCrossingCounts;
+
+const trimmedMaximumRingingCrossingCount =
+  trimmedRingingCrossingCounts.length > 0
+    ? Math.max(...trimmedRingingCrossingCounts)
+    : null;
+    const highestRingingEvent =
+  validRingingEvents.reduce(
+    (highestEvent, event) => {
+      if (
+        !highestEvent ||
+        event.ringingTargetCrossingCount >
+          highestEvent.ringingTargetCrossingCount
+      ) {
+        return event;
+      }
+
+      return highestEvent;
+    },
+    null
+  );
+  const ringingConfidence =
+  validRingingEvents.length >= 5
+    ? "High"
+    : validRingingEvents.length >= 3
+      ? "Medium"
+      : validRingingEvents.length >= 2
+        ? "Low"
+        : "Insufficient";
+        const ringingRecommendation =
+  ringingConfidence === "Insufficient" ||
+  ringingConfidence === "Low"
+    ? `Collect more clean ${axisResult.axis} command events before evaluating sustained ringing.`
+    : Number.isFinite(
+        medianRingingCrossingCount
+      ) &&
+        medianRingingCrossingCount >= 3
+      ? `Review ${axisResult.axis} for repeated post-command ringing. Confirm the pattern with another log before changing PID or filter values.`
+      : `No repeated sustained-ringing pattern was identified for ${axisResult.axis}.`;
+      const ringingStatus =
+  ringingConfidence === "Insufficient" ||
+  ringingConfidence === "Low"
+    ? "Insufficient Data"
+    : Number.isFinite(
+        medianRingingCrossingCount
+      ) &&
+        medianRingingCrossingCount >= 3
+      ? "Review"
+      : "Clear";
+  return [
+  `${axisResult.axis} ringing status: ${ringingStatus}`,
+  `${axisResult.axis} ringing confidence: ${ringingConfidence}`,
+  `${axisResult.axis} ringing evidence: ${validRingingEvents.length} valid event${
+    validRingingEvents.length === 1 ? "" : "s"
+  }`,
+  `${axisResult.axis} ringing recommendation: ${ringingRecommendation}`,
+  `${axisResult.axis} average ringing target crossings: ${
+  Number.isFinite(averageRingingCrossingCount)
+    ? averageRingingCrossingCount.toFixed(2)
+    : "Unavailable"
+}`,
+
+`${axisResult.axis} median ringing target crossings: ${
+  Number.isFinite(medianRingingCrossingCount)
+    ? medianRingingCrossingCount.toFixed(2)
+    : "Unavailable"
+}`,
+`${axisResult.axis} trimmed maximum ringing target crossings: ${
+  Number.isFinite(trimmedMaximumRingingCrossingCount)
+    ? trimmedMaximumRingingCrossingCount.toFixed(2)
+    : "Unavailable"
+}`,
+
+`${axisResult.axis} raw maximum ringing target crossings: ${
+  Number.isFinite(maximumRingingCrossingCount)
+    ? maximumRingingCrossingCount.toFixed(2)
+    : "Unavailable"
+}`,
+highestRingingEvent
+  ? `${axisResult.axis} highest ringing event details — sample: ${highestRingingEvent.sampleIndex}, command end: ${highestRingingEvent.commandEndSampleIndex}, target: ${
+      Number.isFinite(highestRingingEvent.commandTarget)
+        ? highestRingingEvent.commandTarget.toFixed(2)
+        : "Unavailable"
+    }, response peak: ${
+      Number.isFinite(highestRingingEvent.responsePeak)
+        ? highestRingingEvent.responsePeak.toFixed(2)
+        : "Unavailable"
+    }, meaningful target crossings: ${
+      Number.isFinite(highestRingingEvent.ringingTargetCrossingCount)
+        ? highestRingingEvent.ringingTargetCrossingCount.toFixed(2)
+        : "Unavailable"
+    }`
+  : `${axisResult.axis} highest ringing event details: Unavailable`
 ];
 }),
 highestTrackingErrorAxis
