@@ -151,7 +151,9 @@ filterAnalysisFindings.innerHTML =
           .join("")
       : "No recommendations available.";
       pidAnalysisStatus.textContent =
-  pidAnalysis?.status || "Unknown";
+  pidAnalysis?.overallStatus
+    ? `${pidAnalysis.status} — ${pidAnalysis.overallStatus}`
+    : pidAnalysis?.status || "Unknown";
 
 pidAnalysisScore.textContent =
   Number.isFinite(pidAnalysis?.score)
@@ -163,13 +165,87 @@ pidAnalysisConfidence.textContent =
     ? `${pidAnalysis.confidence.level} (${pidAnalysis.confidence.score}/100)`
     : "---";
 
-pidAnalysisFindings.innerHTML =
+const pidSummaryHtml =
+  Array.isArray(pidAnalysis?.summary) &&
+  pidAnalysis.summary.length > 0
+    ? pidAnalysis.summary
+        .map(
+          (summaryItem) =>
+            `<div>• ${summaryItem}</div>`
+        )
+        .join("")
+    : "<div>No PID summary available.</div>";
+    const pidScoreExplanationHtml =
+  Array.isArray(pidAnalysis?.scoreExplanation) &&
+  pidAnalysis.scoreExplanation.length > 0
+    ? pidAnalysis.scoreExplanation
+        .map(
+          (explanation) =>
+            `<div>• ${explanation}</div>`
+        )
+        .join("")
+    : "<div>No score explanation available.</div>";
+const pidAxisOverviewHtml =
+  Array.isArray(
+    pidAnalysis?.technicalSummary?.axisStatus
+  ) &&
+  pidAnalysis.technicalSummary.axisStatus.length > 0
+    ? pidAnalysis.technicalSummary.axisStatus
+        .map((axisResult) => {
+          const trackingErrorText =
+            Number.isFinite(
+              axisResult.trackingError
+            )
+              ? axisResult.trackingError.toFixed(2)
+              : "Unavailable";
+
+          return `
+            <div>
+              • ${axisResult.axis}: Tracking error ${trackingErrorText} —
+              Command balance ${axisResult.commandBalanceStatus}
+            </div>
+          `;
+        })
+        .join("")
+    : "<div>No axis overview available.</div>";
+const pidTechnicalFindingsHtml =
   Array.isArray(pidAnalysis?.findings) &&
   pidAnalysis.findings.length > 0
     ? pidAnalysis.findings
-        .map((finding) => `<div>• ${finding}</div>`)
+        .map(
+          (finding) =>
+            `<div>• ${finding}</div>`
+        )
         .join("")
-    : "No findings available.";
+    : "<div>No technical findings available.</div>";
+
+pidAnalysisFindings.innerHTML = `
+  <div>
+    <strong>Summary</strong>
+  </div>
+
+  ${pidSummaryHtml}
+<div style="margin-top: 14px;">
+  <strong>Score Explanation</strong>
+</div>
+
+${pidScoreExplanationHtml}
+
+<div style="margin-top: 14px;">
+  <strong>Axis Overview</strong>
+</div>
+
+${pidAxisOverviewHtml}
+  <details style="margin-top: 16px;">
+    <summary>
+      <strong>Technical Findings</strong>
+    </summary>
+
+    <div style="margin-top: 10px;">
+      ${pidTechnicalFindingsHtml}
+    </div>
+  </details>
+`;
 
 pidAnalysisRecommendations.innerHTML =
   Array.isArray(pidAnalysis?.recommendations) &&

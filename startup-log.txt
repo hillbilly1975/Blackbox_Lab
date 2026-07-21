@@ -1,0 +1,22 @@
+
+> source@1.0.0 start
+> electron-forge start
+
+[33m❯[39m Checking your system
+[33m❯[39m Checking package manager version
+[32m✔[39m Found npm@11.16.0
+[32m✔[39m Checking your system
+[?25h[33m❯[39m Locating application
+[32m✔[39m Locating application
+[33m❯[39m Loading configuration
+[32m✔[39m Loading configuration
+[33m❯[39m Preparing native dependencies
+[32m✔[39m Preparing native dependencies
+[33m❯[39m Running generateAssets hook
+[32m✔[39m Running generateAssets hook
+[33m❯[39m Running preStart hook
+[32m✔[39m Running preStart hook
+[32m✔[39m Launched Electron app. Type rs in terminal to restart main process.
+[?25h
+
+[10356:0714/024613.435:ERROR:third_party\crashpad\crashpad\client\crashpad_client_win.cc:867] not connected

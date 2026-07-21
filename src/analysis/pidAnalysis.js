@@ -830,6 +830,280 @@ const pidTermAverageAbsolute = {
       })
     )
 };
+const calculateMaximumAbsolute = (values) =>
+  values.reduce((maximum, value) => {
+    if (!Number.isFinite(value)) {
+      return maximum;
+    }
+
+    return Math.max(
+      maximum,
+      Math.abs(value)
+    );
+  }, 0);
+
+const pidTermMaximumAbsolute = {
+  p: pidTermValues.p.map((termResult) => ({
+    axis: termResult.axis,
+    columnName: termResult.columnName,
+    maximumAbsolute:
+      calculateMaximumAbsolute(
+        termResult.values
+      )
+  })),
+
+  i: pidTermValues.i.map((termResult) => ({
+    axis: termResult.axis,
+    columnName: termResult.columnName,
+    maximumAbsolute:
+      calculateMaximumAbsolute(
+        termResult.values
+      )
+  })),
+
+  d: pidTermValues.d.map((termResult) => ({
+    axis: termResult.axis,
+    columnName: termResult.columnName,
+    maximumAbsolute:
+      calculateMaximumAbsolute(
+        termResult.values
+      )
+  })),
+
+  feedforward:
+    pidTermValues.feedforward.map(
+      (termResult) => ({
+        axis: termResult.axis,
+        columnName: termResult.columnName,
+        maximumAbsolute:
+          calculateMaximumAbsolute(
+            termResult.values
+          )
+      })
+    )
+};
+const analyzeNearPeakActivity = (
+  values,
+  maximumAbsolute
+) => {
+  if (
+    !Array.isArray(values) ||
+    values.length === 0 ||
+    !Number.isFinite(maximumAbsolute) ||
+    maximumAbsolute <= 0
+  ) {
+    return {
+      sampleCount: 0,
+      nearPeakSampleCount: 0,
+      nearPeakPercent: null,
+      longestNearPeakRun: 0,
+      threshold: null
+    };
+  }
+
+  const threshold =
+    maximumAbsolute * 0.98;
+
+  let validSampleCount = 0;
+  let nearPeakSampleCount = 0;
+  let currentNearPeakRun = 0;
+  let longestNearPeakRun = 0;
+
+  for (const value of values) {
+    if (!Number.isFinite(value)) {
+      currentNearPeakRun = 0;
+      continue;
+    }
+
+    validSampleCount += 1;
+
+    const isNearPeak =
+      Math.abs(value) >= threshold;
+
+    if (isNearPeak) {
+      nearPeakSampleCount += 1;
+      currentNearPeakRun += 1;
+
+      longestNearPeakRun = Math.max(
+        longestNearPeakRun,
+        currentNearPeakRun
+      );
+    } else {
+      currentNearPeakRun = 0;
+    }
+  }
+
+  return {
+    sampleCount: validSampleCount,
+    nearPeakSampleCount,
+    nearPeakPercent:
+      validSampleCount > 0
+        ? (
+            nearPeakSampleCount /
+            validSampleCount
+          ) * 100
+        : null,
+    longestNearPeakRun,
+    threshold
+  };
+};
+
+const pidTermNearPeakActivity = {
+  p: pidTermValues.p.map(
+    (termResult, axisIndex) => ({
+      axis: termResult.axis,
+      columnName: termResult.columnName,
+      ...analyzeNearPeakActivity(
+        termResult.values,
+        pidTermMaximumAbsolute.p[
+          axisIndex
+        ]?.maximumAbsolute
+      )
+    })
+  ),
+
+  i: pidTermValues.i.map(
+    (termResult, axisIndex) => ({
+      axis: termResult.axis,
+      columnName: termResult.columnName,
+      ...analyzeNearPeakActivity(
+        termResult.values,
+        pidTermMaximumAbsolute.i[
+          axisIndex
+        ]?.maximumAbsolute
+      )
+    })
+  ),
+
+  d: pidTermValues.d.map(
+    (termResult, axisIndex) => ({
+      axis: termResult.axis,
+      columnName: termResult.columnName,
+      ...analyzeNearPeakActivity(
+        termResult.values,
+        pidTermMaximumAbsolute.d[
+          axisIndex
+        ]?.maximumAbsolute
+      )
+    })
+  ),
+
+  feedforward:
+    pidTermValues.feedforward.map(
+      (termResult, axisIndex) => ({
+        axis: termResult.axis,
+        columnName: termResult.columnName,
+        ...analyzeNearPeakActivity(
+          termResult.values,
+          pidTermMaximumAbsolute.feedforward[
+            axisIndex
+          ]?.maximumAbsolute
+        )
+      })
+    )
+};
+const classifyPidTermSaturation = (
+  nearPeakResult
+) => {
+  const nearPeakPercent =
+    nearPeakResult?.nearPeakPercent;
+
+  const longestNearPeakRun =
+    nearPeakResult?.longestNearPeakRun ?? 0;
+
+  const sampleCount =
+    nearPeakResult?.sampleCount ?? 0;
+
+  if (
+    sampleCount <= 0 ||
+    !Number.isFinite(nearPeakPercent)
+  ) {
+    return {
+      status: "Insufficient Data",
+      confidence: "Low",
+      recommendation:
+        "More valid PID-term samples are required before evaluating saturation."
+    };
+  }
+
+  const sustainedRunDetected =
+    longestNearPeakRun >= 100;
+
+  const elevatedNearPeakActivity =
+    nearPeakPercent >= 0.25;
+
+  const moderateNearPeakActivity =
+    nearPeakPercent >= 0.10;
+
+  const status =
+    sustainedRunDetected &&
+    elevatedNearPeakActivity
+      ? "Review"
+      : "Clear";
+
+  const confidence =
+    sampleCount >= 10000
+      ? "High"
+      : sampleCount >= 1000
+        ? "Medium"
+        : "Low";
+
+  const recommendation =
+    status === "Review"
+      ? "Repeated near-maximum PID-term activity was detected. Review the affected axis and term together with command activity, tracking error, and clipping evidence before changing PID values."
+      : sustainedRunDetected &&
+          moderateNearPeakActivity
+        ? "A sustained near-peak run was detected, but total near-peak activity remained below the Review threshold. Monitor this term in another comparable log."
+        : "No repeated sustained PID-term saturation pattern was identified.";
+
+  return {
+    status,
+    confidence,
+    recommendation,
+    sustainedRunDetected,
+    elevatedNearPeakActivity,
+    moderateNearPeakActivity
+  };
+};
+
+const pidTermSaturationAssessment = {
+  p: pidTermNearPeakActivity.p.map(
+    (termResult) => ({
+      ...termResult,
+      ...classifyPidTermSaturation(
+        termResult
+      )
+    })
+  ),
+
+  i: pidTermNearPeakActivity.i.map(
+    (termResult) => ({
+      ...termResult,
+      ...classifyPidTermSaturation(
+        termResult
+      )
+    })
+  ),
+
+  d: pidTermNearPeakActivity.d.map(
+    (termResult) => ({
+      ...termResult,
+      ...classifyPidTermSaturation(
+        termResult
+      )
+    })
+  ),
+
+  feedforward:
+    pidTermNearPeakActivity.feedforward.map(
+      (termResult) => ({
+        ...termResult,
+        ...classifyPidTermSaturation(
+          termResult
+        )
+      })
+    )
+};
 const pidCommandWindowsByAxis =
   commandEvents.map((axisResult, axisIndex) => ({
     axis: axisResult.axis,
@@ -1218,10 +1492,142 @@ const confidenceLevel =
       };
     }
   );
- 
+ const saturationReviewTerms = [
+  ...pidTermSaturationAssessment.p,
+  ...pidTermSaturationAssessment.i,
+  ...pidTermSaturationAssessment.d,
+  ...pidTermSaturationAssessment.feedforward
+].filter(
+  (termResult) =>
+    termResult.status === "Review"
+);
+
+const commandBalanceReviewAxes =
+  pidCommandBalanceAssessment.filter(
+    (axisResult) =>
+      axisResult.status === "Review"
+  );
+
+const pidSummary = [
+  highestTrackingErrorAxis
+    ? `${highestTrackingErrorAxis.axis} has the highest tracking error.`
+    : "Tracking-error priority could not be identified.",
+
+  commandBalanceReviewAxes.length > 0
+    ? `${commandBalanceReviewAxes
+        .map((axisResult) => axisResult.axis)
+        .join(", ")} command balance requires review.`
+    : "No command-balance review condition was identified.",
+
+  saturationReviewTerms.length > 0
+    ? `${saturationReviewTerms.length} PID term${
+        saturationReviewTerms.length === 1
+          ? ""
+          : "s"
+      } showed possible sustained saturation.`
+    : "No sustained PID-term saturation pattern was identified.",
+
+  bestTrackingProfile
+    ? `${bestTrackingProfile.targetRpm} RPM produced the lowest overall tracking error.`
+    : "A best tracking profile could not be identified."
+];
+const pidOverallStatus =
+  saturationReviewTerms.length > 0
+    ? "Review"
+    : commandBalanceReviewAxes.length > 0
+      ? "Review"
+      : "Clear";
+      const pidScoreDeductions = {
+  commandBalance:
+    Math.min(
+      commandBalanceReviewAxes.length * 20,
+      40
+    ),
+
+  saturation:
+    Math.min(
+      saturationReviewTerms.length * 15,
+      45
+    ),
+realWorldMargin: 2,
+  incompleteTracking:
+    highestTrackingErrorAxis ? 0 : 15,
+
+  incompleteProfileComparison: 0
+    
+};
+
+const pidScore = Math.max(
+  0,
+  100 -
+    pidScoreDeductions.commandBalance -
+    pidScoreDeductions.saturation -
+    pidScoreDeductions.realWorldMargin -
+    pidScoreDeductions.incompleteTracking -
+    pidScoreDeductions.incompleteProfileComparison
+);
+const pidScoreExplanation = [
+  `${pidScoreDeductions.realWorldMargin} points are reserved because one real-world flight cannot prove a mathematically perfect PID tune.`,
+  commandBalanceReviewAxes.length > 0
+    ? `${pidScoreDeductions.commandBalance} points deducted because ${commandBalanceReviewAxes
+        .map((axisResult) => axisResult.axis)
+        .join(", ")} command balance requires review.`
+    : "No points were deducted for command balance.",
+
+  saturationReviewTerms.length > 0
+    ? `${pidScoreDeductions.saturation} points deducted because sustained PID-term saturation requires review.`
+    : "No points were deducted for PID-term saturation.",
+
+  !highestTrackingErrorAxis
+    ? `${pidScoreDeductions.incompleteTracking} points deducted because complete tracking data was unavailable.`
+    : "No points were deducted for missing tracking data.",
+
+  bestTrackingProfile
+  ? "No points were deducted for profile comparison data."
+  : "Profile comparison was not available and did not affect the PID score."
+];
   return {
     status: "PID Tracking Analysis Complete",
-    score: null,
+    summary: pidSummary,
+    overallStatus: pidOverallStatus,
+    score: pidScore,
+    scoreExplanation: pidScoreExplanation,
+    technicalSummary: {
+  highestTrackingErrorAxis:
+    highestTrackingErrorAxis?.axis ?? null,
+  bestTrackingProfileRpm:
+    bestTrackingProfile?.targetRpm ?? null,
+  commandBalanceReviewAxes:
+    commandBalanceReviewAxes.map(
+      (axisResult) => axisResult.axis
+    ),
+  saturationReviewTermCount:
+    saturationReviewTerms.length,
+    axisStatus: axisNames.map((axis) => {
+  const commandBalance =
+    pidCommandBalanceAssessment.find(
+      (axisResult) =>
+        axisResult.axis === axis
+    );
+
+  const trackingError =
+    averageAbsoluteAxisError.find(
+      (axisResult) =>
+        axisResult.axis === axis
+    );
+
+  return {
+    axis,
+    trackingError:
+      trackingError?.averageAbsoluteError ??
+      null,
+    commandBalanceStatus:
+      commandBalance?.status ??
+      "Insufficient Data"
+  };
+})
+},
+    
     confidence: {
   level: confidenceLevel,
   score: confidenceScore,
@@ -1935,6 +2341,159 @@ worstTrackingProfile
         : "Unavailable"
     }%`
 ),
+...axisNames.flatMap((axis, axisIndex) => [
+  `${axis} observed P-term peak: ${
+    Number.isFinite(
+      pidTermMaximumAbsolute.p[axisIndex]
+        ?.maximumAbsolute
+    )
+      ? pidTermMaximumAbsolute.p[
+          axisIndex
+        ].maximumAbsolute.toFixed(2)
+      : "Unavailable"
+  }`,
+
+  `${axis} observed I-term peak: ${
+    Number.isFinite(
+      pidTermMaximumAbsolute.i[axisIndex]
+        ?.maximumAbsolute
+    )
+      ? pidTermMaximumAbsolute.i[
+          axisIndex
+        ].maximumAbsolute.toFixed(2)
+      : "Unavailable"
+  }`,
+
+  `${axis} observed D-term peak: ${
+    Number.isFinite(
+      pidTermMaximumAbsolute.d[axisIndex]
+        ?.maximumAbsolute
+    )
+      ? pidTermMaximumAbsolute.d[
+          axisIndex
+        ].maximumAbsolute.toFixed(2)
+      : "Unavailable"
+  }`,
+
+  `${axis} observed Feedforward peak: ${
+    Number.isFinite(
+      pidTermMaximumAbsolute.feedforward[
+        axisIndex
+      ]?.maximumAbsolute
+    )
+      ? pidTermMaximumAbsolute.feedforward[
+          axisIndex
+        ].maximumAbsolute.toFixed(2)
+      : "Unavailable"
+  }`
+]),
+...axisNames.flatMap((axis, axisIndex) => [
+  `${axis} P-term near-peak activity: ${
+    Number.isFinite(
+      pidTermNearPeakActivity.p[axisIndex]
+        ?.nearPeakPercent
+    )
+      ? pidTermNearPeakActivity.p[
+          axisIndex
+        ].nearPeakPercent.toFixed(4)
+      : "Unavailable"
+  }% across ${
+    pidTermNearPeakActivity.p[axisIndex]
+      ?.nearPeakSampleCount ?? 0
+  } samples, longest run ${
+    pidTermNearPeakActivity.p[axisIndex]
+      ?.longestNearPeakRun ?? 0
+  } samples`,
+
+  `${axis} I-term near-peak activity: ${
+    Number.isFinite(
+      pidTermNearPeakActivity.i[axisIndex]
+        ?.nearPeakPercent
+    )
+      ? pidTermNearPeakActivity.i[
+          axisIndex
+        ].nearPeakPercent.toFixed(4)
+      : "Unavailable"
+  }% across ${
+    pidTermNearPeakActivity.i[axisIndex]
+      ?.nearPeakSampleCount ?? 0
+  } samples, longest run ${
+    pidTermNearPeakActivity.i[axisIndex]
+      ?.longestNearPeakRun ?? 0
+  } samples`,
+
+  `${axis} D-term near-peak activity: ${
+    Number.isFinite(
+      pidTermNearPeakActivity.d[axisIndex]
+        ?.nearPeakPercent
+    )
+      ? pidTermNearPeakActivity.d[
+          axisIndex
+        ].nearPeakPercent.toFixed(4)
+      : "Unavailable"
+  }% across ${
+    pidTermNearPeakActivity.d[axisIndex]
+      ?.nearPeakSampleCount ?? 0
+  } samples, longest run ${
+    pidTermNearPeakActivity.d[axisIndex]
+      ?.longestNearPeakRun ?? 0
+  } samples`,
+
+  `${axis} Feedforward near-peak activity: ${
+    Number.isFinite(
+      pidTermNearPeakActivity.feedforward[
+        axisIndex
+      ]?.nearPeakPercent
+    )
+      ? pidTermNearPeakActivity.feedforward[
+          axisIndex
+        ].nearPeakPercent.toFixed(4)
+      : "Unavailable"
+  }% across ${
+    pidTermNearPeakActivity.feedforward[
+      axisIndex
+    ]?.nearPeakSampleCount ?? 0
+  } samples, longest run ${
+    pidTermNearPeakActivity.feedforward[
+      axisIndex
+    ]?.longestNearPeakRun ?? 0
+  } samples`
+]),
+...axisNames.flatMap((axis, axisIndex) => [
+  `${axis} P-term saturation status: ${
+    pidTermSaturationAssessment.p[axisIndex]
+      ?.status ?? "Insufficient Data"
+  } with ${
+    pidTermSaturationAssessment.p[axisIndex]
+      ?.confidence ?? "Low"
+  } confidence`,
+
+  `${axis} I-term saturation status: ${
+    pidTermSaturationAssessment.i[axisIndex]
+      ?.status ?? "Insufficient Data"
+  } with ${
+    pidTermSaturationAssessment.i[axisIndex]
+      ?.confidence ?? "Low"
+  } confidence`,
+
+  `${axis} D-term saturation status: ${
+    pidTermSaturationAssessment.d[axisIndex]
+      ?.status ?? "Insufficient Data"
+  } with ${
+    pidTermSaturationAssessment.d[axisIndex]
+      ?.confidence ?? "Low"
+  } confidence`,
+
+  `${axis} Feedforward saturation status: ${
+    pidTermSaturationAssessment.feedforward[
+      axisIndex
+    ]?.status ?? "Insufficient Data"
+  } with ${
+    pidTermSaturationAssessment.feedforward[
+      axisIndex
+    ]?.confidence ?? "Low"
+  } confidence`
+]),
      `P-term columns detected: ${groupedPidColumns.p.length}`,
       `P-term column names: ${groupedPidColumns.p.join(", ")}`,
       `Axis setpoint column names: ${axisSetpointColumns.join(", ")}`,
@@ -1944,6 +2503,26 @@ worstTrackingProfile
 `PID-sum columns detected: ${groupedPidColumns.pidSum.length}`
     ],
     recommendations: [
+      ...[
+  ...pidTermSaturationAssessment.p,
+  ...pidTermSaturationAssessment.i,
+  ...pidTermSaturationAssessment.d,
+  ...pidTermSaturationAssessment.feedforward
+]
+  .filter(
+    (termResult) =>
+      termResult.status === "Review"
+  )
+  .map(
+    (termResult) =>
+      `Review ${termResult.axis} ${termResult.columnName} for possible sustained PID-term saturation. Near-peak activity reached ${
+        Number.isFinite(termResult.nearPeakPercent)
+          ? termResult.nearPeakPercent.toFixed(4)
+          : "Unavailable"
+      }% with a longest run of ${
+        termResult.longestNearPeakRun ?? 0
+      } samples. Compare this with command activity, tracking error, and the matching axis response before changing PID values.`
+  ),
       ...pidCommandBalanceAssessment
   .filter(
     (axisResult) =>
@@ -1953,18 +2532,15 @@ worstTrackingProfile
     (axisResult) =>
       `Review ${axisResult.axis} command balance before changing PID values. I remains dominant during command events while P plus feedforward support stays below 35%, and this axis also has the highest tracking error. Compare setpoint, axis error, feedforward, and I behavior together.`
   ),
-  highestTrackingErrorAxis
-    ? `Review ${highestTrackingErrorAxis.axis} first during PID tuning. Compare its setpoint, axis error, and P/I/D/feedforward response before changing any values.`
-    : "Collect a log with valid Roll, Pitch, and Yaw tracking data before making PID changes.",
-    bestTrackingProfile &&
-worstTrackingProfile &&
-bestTrackingProfile.targetRpm !==
-  worstTrackingProfile.targetRpm
-  ? `Use ${bestTrackingProfile.targetRpm} RPM as the current PID-tracking baseline. The ${worstTrackingProfile.targetRpm} RPM profile produced higher overall tracking error. Review its axis response and vibration evidence before changing global PID values.`
-  : "More than one valid headspeed profile is needed for a profile-to-profile PID recommendation."
-],
-    evidence: [
-      {
+ commandBalanceReviewAxes.length === 0 &&
+saturationReviewTerms.length === 0 &&
+highestTrackingErrorAxis
+  ? `No command-balance or PID-term saturation review condition was identified. If further tuning is desired, compare ${highestTrackingErrorAxis.axis} first because it had the highest tracking error.`
+  : null,
+   ].filter(Boolean),
+  
+        evidence: [
+      {  
         source: "Setpoint Columns",
         value: setpointColumns
       },
