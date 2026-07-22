@@ -120,3 +120,83 @@ test("assessTrends stays quiet on a stable machine", () => {
   assert.equal(findings.length, 0);
   assert.match(note, /stable/);
 });
+
+// ------------------------------------------------------
+// Log quality gate + filter advisor
+// ------------------------------------------------------
+
+const { assessLogQuality } = await import("../src/analysis/logQuality.js");
+const { adviseFilters } = await import("../src/analysis/filterAdvisor.js");
+
+test("quality gate flags slow logging and missing telemetry", () => {
+  const quality = assessLogQuality({
+    sampleRateHz: 500,
+    durationSeconds: 12,
+    corruptFrames: 30,
+    totalFrames: 600,
+    hasUnfilteredGyro: true,
+    hasFilteredGyro: true,
+    hasHeadspeed: false,
+    hasGovernorTarget: false,
+    hasVbat: true,
+    hasAmperage: false
+  });
+
+  const vibration = quality.capabilities.find((c) => c.name.includes("Vibration"));
+  assert.equal(vibration.level, "partial");
+  const governor = quality.capabilities.find((c) => c.name === "Governor");
+  assert.equal(governor.level, "missing");
+  assert.equal(quality.warnings.length, 2); // short + corrupt
+});
+
+test("quality gate praises a complete fast log", () => {
+  const quality = assessLogQuality({
+    sampleRateHz: 2000,
+    durationSeconds: 300,
+    corruptFrames: 0,
+    totalFrames: 60000,
+    hasUnfilteredGyro: true,
+    hasFilteredGyro: true,
+    hasHeadspeed: true,
+    hasGovernorTarget: true,
+    hasVbat: true,
+    hasAmperage: true
+  });
+
+  assert.ok(quality.capabilities.every((c) => c.level === "full"));
+  assert.match(quality.summary, /excellent/);
+});
+
+test("filter advisor classifies rotor-linked peaks and measures attenuation", () => {
+  const spectrum = (peaks) => {
+    const frequencies = [];
+    const magnitudes = [];
+
+    for (let hz = 0; hz < 300; hz += 1) {
+      frequencies.push(hz);
+      magnitudes.push(peaks[hz] ?? 0.3);
+    }
+
+    return { frequencies, magnitudes };
+  };
+
+  // 1800 rpm → 30 Hz 1/rev; 138 Hz tail (4.6×)
+  const advice = adviseFilters({
+    unfilteredSpectrum: spectrum({ 30: 25, 138: 12 }),
+    filteredSpectrum: spectrum({ 30: 2, 138: 8 }),
+    headspeedRpm: 1800
+  });
+
+  assert.equal(advice.rows.length, 2);
+  assert.match(advice.rows[0].source, /main rotor 1\/rev/);
+  assert.match(advice.rows[1].source, /tail region/);
+  assert.ok(advice.rows[0].reductionPercent > 85);
+  assert.ok(advice.rows[1].reductionPercent < 70);
+
+  const doFirst = advice.recommendations.find((r) => r.priority === "first");
+  assert.ok(doFirst, "strong peak must trigger mechanics-first advice");
+
+  const filters = advice.recommendations.filter((r) => r.priority === "filters");
+  assert.ok(filters.some((r) => /RPM filter/.test(r.text)));
+  assert.ok(filters.some((r) => /138 Hz/.test(r.text)));
+});

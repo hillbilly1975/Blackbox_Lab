@@ -12,8 +12,9 @@ module.exports = {
       config: {},
     },
     {
+      // Portable zip for every platform — the no-installer option.
       name: '@electron-forge/maker-zip',
-      platforms: ['darwin'],
+      platforms: ['darwin', 'linux', 'win32'],
     },
     {
       name: '@electron-forge/maker-deb',

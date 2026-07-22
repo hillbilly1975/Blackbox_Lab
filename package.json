@@ -11,7 +11,7 @@
     "make": "electron-forge make",
     "publish": "electron-forge publish",
     "lint": "echo \"No linting configured\"",
-    "test": "node --test test/*.mjs",
+    "test": "node --test",
     "generate-samples": "node tools/generateSampleLog.mjs"
   },
   "keywords": [

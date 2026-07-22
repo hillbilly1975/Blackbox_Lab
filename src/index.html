@@ -49,6 +49,13 @@
           <div id="verdictCards"></div>
         </section>
 
+        <section class="card" id="qualityCard" hidden>
+          <h3>What This Log Can Tell Us</h3>
+          <p id="qualitySummary"></p>
+          <div class="quality-chips" id="qualityChips"></div>
+          <div id="qualityWarnings"></div>
+        </section>
+
         <section class="card">
           <h3>Start Here</h3>
           <p>
@@ -264,6 +271,15 @@
           <div class="chart-container" id="chartSpectrum">
             <p class="chart-empty">Open a log to see this chart.</p>
           </div>
+        </section>
+
+        <section class="card" id="filterAdvisorCard" hidden>
+          <h3>Filter Advisor</h3>
+          <p class="lab-story" id="filterAdvisorStory"></p>
+          <div class="table-scroll">
+            <table class="history-table" id="filterAdvisorTable"></table>
+          </div>
+          <div id="filterAdvisorRecommendations"></div>
         </section>
 
         <section class="card" id="filterLabSection">

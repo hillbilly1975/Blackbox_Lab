@@ -59,7 +59,8 @@ export async function readLogFile(file) {
             ? `Flight ${flight.index + 1} (${flight.durationSeconds.toFixed(1)} s)`
             : "Flight 1",
         lines: decodedFlightToCsvLines(flight),
-        decodeInfo: describeDecode(flight)
+        decodeInfo: describeDecode(flight),
+        stats: flight.stats
       }));
 
     return {
@@ -89,7 +90,8 @@ export async function readLogFile(file) {
       {
         label: "Flight 1",
         lines,
-        decodeInfo: null
+        decodeInfo: null,
+        stats: null
       }
     ]
   };

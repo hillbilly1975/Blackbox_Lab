@@ -21,6 +21,8 @@ import {
 } from "./analysis/dsp/fft.js";
 import { buildFlightVerdict } from "./analysis/flightVerdict.js";
 import { compareFlights } from "./analysis/compareFlights.js";
+import { assessLogQuality } from "./analysis/logQuality.js";
+import { adviseFilters } from "./analysis/filterAdvisor.js";
 import {
   loadHistory,
   recordFlight,
@@ -95,6 +97,16 @@ const escStory = el("escStory");
 const escMetrics = el("escMetrics");
 const batteryStory = el("batteryStory");
 const batteryMetrics = el("batteryMetrics");
+
+const qualityCard = el("qualityCard");
+const qualitySummary = el("qualitySummary");
+const qualityChips = el("qualityChips");
+const qualityWarnings = el("qualityWarnings");
+
+const filterAdvisorCard = el("filterAdvisorCard");
+const filterAdvisorStory = el("filterAdvisorStory");
+const filterAdvisorTable = el("filterAdvisorTable");
+const filterAdvisorRecommendations = el("filterAdvisorRecommendations");
 
 const compareBaselineInfo = el("compareBaselineInfo");
 const compareOpenButton = el("compareOpenButton");
@@ -230,6 +242,10 @@ flightSelect.addEventListener("change", () => {
 // 04. DATASET
 // ======================================================
 
+function hasOwnUnfiltered(headerLine) {
+  return findColumns(headerLine, [/^gyroUnfilt/i]).length > 0;
+}
+
 function findColumns(headerLine, patterns) {
   const names = headerLine.split(",").map((name) => name.trim());
 
@@ -360,6 +376,59 @@ function buildDataset(lines, pidAnalysis) {
 
   const markers = buildSpectrumMarkers(spectra, governedHeadspeed);
 
+  // ---- filter advisor: unfiltered vs filtered gyro ----
+  const filteredColumns = findColumns(headerLine, [/^gyroADC/i]).slice(0, 3);
+  let filteredSpectrumStrongest = null;
+
+  if (sampleRate && unfilteredColumns.length > 0 && filteredColumns.length > 0) {
+    // Match the axis of the strongest unfiltered spectrum
+    // so attenuation is measured apples-to-apples.
+    let strongestIndex = 0;
+    let strongestValue = 0;
+
+    spectra.forEach((entry, index) => {
+      const peak = Math.max(...entry.spectrum.magnitudes);
+
+      if (peak > strongestValue) {
+        strongestValue = peak;
+        strongestIndex = index;
+      }
+    });
+
+    const filteredName = filteredColumns[strongestIndex] ?? filteredColumns[0];
+    filteredSpectrumStrongest = computeNoiseSpectrum(
+      columnValues(filteredName).slice(spectrumStart),
+      sampleRate
+    );
+  }
+
+  const unfilteredSpectrumStrongest = (() => {
+    if (spectra.length === 0) {
+      return null;
+    }
+
+    let strongest = spectra[0];
+
+    for (const entry of spectra) {
+      if (
+        Math.max(...entry.spectrum.magnitudes) >
+        Math.max(...strongest.spectrum.magnitudes)
+      ) {
+        strongest = entry;
+      }
+    }
+
+    return strongest.spectrum;
+  })();
+
+  const filterAdvice = adviseFilters({
+    unfilteredSpectrum: unfilteredSpectrumStrongest,
+    filteredSpectrum: hasOwnUnfiltered(headerLine)
+      ? filteredSpectrumStrongest
+      : null,
+    headspeedRpm: governedHeadspeed
+  });
+
   // ---- labs + verdict ----
   const labs = {
     governor: analyzeGovernorLab({ timeSeconds, headspeed, governorTarget }),
@@ -398,6 +467,16 @@ function buildDataset(lines, pidAnalysis) {
   return {
     pidScore: Number.isFinite(pidAnalysis?.score) ? pidAnalysis.score : null,
     batterySagPercent: labs.battery ? labs.battery.sagPercent : null,
+    filterAdvice,
+    sampleRateHz: sampleRate,
+    columnPresence: {
+      hasUnfilteredGyro: unfilteredColumns.length > 0,
+      hasFilteredGyro: filteredColumns.length > 0,
+      hasHeadspeed: Boolean(headspeed),
+      hasGovernorTarget: Boolean(governorTarget),
+      hasVbat: Boolean(vbat),
+      hasAmperage: Boolean(amperage)
+    },
     headerLine,
     timeSeconds,
     columnValues,
@@ -665,6 +744,97 @@ function renderAllCharts(dataset) {
   }
 }
 
+function renderQuality(dataset, flightStats) {
+  if (!dataset) {
+    qualityCard.hidden = true;
+    return;
+  }
+
+  const quality = assessLogQuality({
+    sampleRateHz: dataset.sampleRateHz,
+    durationSeconds:
+      dataset.timeSeconds[dataset.timeSeconds.length - 1],
+    corruptFrames: flightStats?.corruptFrames ?? 0,
+    totalFrames: flightStats
+      ? flightStats.intraFrames + flightStats.interFrames
+      : 0,
+    ...dataset.columnPresence
+  });
+
+  qualityCard.hidden = false;
+  qualitySummary.textContent = quality.summary;
+  qualityChips.innerHTML = "";
+
+  for (const capability of quality.capabilities) {
+    const chip = document.createElement("div");
+    chip.className = `quality-chip quality-${capability.level}`;
+    chip.innerHTML = `
+      <strong><span class="status-dot"></span>${capability.name}</strong>
+      ${capability.note}
+    `;
+    qualityChips.appendChild(chip);
+  }
+
+  qualityWarnings.innerHTML = "";
+
+  for (const warning of quality.warnings) {
+    const warningElement = document.createElement("div");
+    warningElement.className = "quality-warning";
+    warningElement.textContent = warning;
+    qualityWarnings.appendChild(warningElement);
+  }
+}
+
+function renderFilterAdvisor(dataset) {
+  const advice = dataset?.filterAdvice;
+
+  if (!advice) {
+    filterAdvisorCard.hidden = true;
+    return;
+  }
+
+  filterAdvisorCard.hidden = false;
+  filterAdvisorStory.textContent = advice.story;
+
+  if (advice.rows.length > 0) {
+    filterAdvisorTable.innerHTML = `
+      <tr>
+        <th>Peak</th><th>Likely source</th><th>Raw</th>
+        <th>After filters</th><th>Removed</th>
+      </tr>
+      ${advice.rows
+        .map(
+          (row) => `
+        <tr>
+          <td>${row.hz} Hz</td>
+          <td>${row.source}</td>
+          <td>${row.magnitude}</td>
+          <td>${row.filteredMagnitude ?? "—"}</td>
+          <td>${row.reductionPercent !== null ? row.reductionPercent + "%" : "—"}</td>
+        </tr>`
+        )
+        .join("")}
+    `;
+  } else {
+    filterAdvisorTable.innerHTML = "";
+  }
+
+  filterAdvisorRecommendations.innerHTML = "";
+
+  advice.recommendations.forEach((recommendation, index) => {
+    const item = document.createElement("div");
+    item.className = `advisor-recommendation priority-${recommendation.priority}`;
+    item.innerHTML = `<span>${
+      recommendation.priority === "first"
+        ? "Do this first:"
+        : recommendation.priority === "filters"
+          ? "Filters:"
+          : "Worth knowing:"
+    }</span> ${recommendation.text}`;
+    filterAdvisorRecommendations.appendChild(item);
+  });
+}
+
 // ======================================================
 // 06. ANALYSIS + SCREEN UPDATE
 // ======================================================
@@ -722,6 +892,8 @@ function analyzeFlight(flightIndex) {
   currentDataset = buildDataset(lines, pidAnalysis);
 
   renderVerdict(currentDataset);
+  renderQuality(currentDataset, flight.stats);
+  renderFilterAdvisor(currentDataset);
   renderAllCharts(currentDataset);
 
   renderLab(
