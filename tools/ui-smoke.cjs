@@ -1,7 +1,7 @@
 // ======================================================
 // BLACKBOX LAB — UI SMOKE TEST (Playwright drives the
 // real Electron app; screenshots land in smoke-shots/)
-// Run:  node tools/smoke-test.cjs
+// Run:  node tools/ui-smoke.cjs
 // ======================================================
 
 const { _electron } = require("playwright-core");
