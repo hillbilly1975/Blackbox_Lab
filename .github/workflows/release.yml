@@ -1,11 +1,7 @@
 # ======================================================
 # BLACKBOX LAB — RELEASE WORKFLOW
 #
-# TO ACTIVATE: move this file to .github/workflows/release.yml
-# (push tokens without the "workflow" scope cannot create it,
-# which is why it ships here).
-#
-# Then releasing is: bump version in package.json, and
+# Releasing: bump version in package.json, then
 #   git tag v0.4.0 && git push --tags
 # GitHub builds Windows, macOS and Linux packages and
 # attaches them to a DRAFT release for you to publish.
