@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <title>Blackbox Lab</title>
   <link rel="stylesheet" href="index.css" />
+  <link rel="stylesheet" href="vendor/uplot/uPlot.min.css" />
 </head>
 
 <body>
@@ -12,129 +13,281 @@
       <h1>Blackbox Lab</h1>
       <p class="tagline">Rotorflight Analysis Suite</p>
 
-      <button class="nav-button active">Home</button>
+      <button class="nav-button" data-target="home">Home</button>
       <button class="nav-button" id="openLogButton">Open Blackbox Log</button>
-      <button class="nav-button">Flight Analysis</button>
-      <button
-  class="nav-button"
-  id="filterLabButton"
-  onclick="document.getElementById('filterLabSection').scrollIntoView({ behavior: 'smooth' })"
->
-  Filter Lab
-</button>
-      <button class="nav-button">Governor Lab</button>
-      <button class="nav-button">ESC Lab</button>
-      <button class="nav-button">Battery Lab</button>
-      <button class="nav-button">Reports</button>
-      <button class="nav-button">Settings</button>
+      <button class="nav-button" data-target="viewer">Log Viewer</button>
+      <button class="nav-button" data-target="filter">Filter Lab</button>
+      <button class="nav-button" data-target="pid">PID Lab</button>
+      <button class="nav-button" data-target="governor">Governor Lab</button>
+      <button class="nav-button" data-target="esc">ESC Lab</button>
+      <button class="nav-button" data-target="battery">Battery Lab</button>
+      <button class="nav-button" data-target="reports">Reports</button>
+      <button class="nav-button" data-target="settings">Settings</button>
     </aside>
 
     <main class="workspace">
-      <section class="hero">
-        <h2>Welcome to Blackbox Lab</h2>
-        <p>Simple first. Deeper when you want it.</p>
-      </section>
 
-      <section class="card">
-        <h3>Open Flight Log</h3>
-        <p>Select a Rotorflight Blackbox CSV or log file to begin analysis.</p>
+      <!-- ============ HOME ============ -->
+      <section data-screen="home">
+        <section class="hero">
+          <h2>Welcome to Blackbox Lab</h2>
+          <p>Simple first. Deeper when you want it.</p>
+        </section>
 
-        <input type="file" id="logFileInput" accept=".csv,.bbl,.txt" hidden />
+        <section class="card">
+          <h3>Open Flight Log</h3>
+          <p>
+            Select a Rotorflight Blackbox log to begin analysis.
+            Raw <strong>.bbl</strong> files are decoded natively —
+            no CSV conversion needed.
+          </p>
 
-        <button class="primary-button" id="chooseFileButton">
-          Open Blackbox Log
-        </button>
+          <input type="file" id="logFileInput" accept=".csv,.bbl,.bfl,.txt,.log" hidden />
 
-        <div class="file-status" id="fileStatus">
-          No log loaded
-        </div>
-      </section>
+          <button class="primary-button" id="chooseFileButton">
+            Open Blackbox Log
+          </button>
 
-      <section class="card">
-        <h3>Flight Summary</h3>
-        <h3>Telemetry Columns</h3>
-        <pre id="telemetryColumns">No telemetry loaded.</pre>
-        <div class="summary-grid">
-          <div>
-            <span class="label">File Name</span>
-            <strong id="summaryFileName">---</strong>
+          <div class="file-status" id="fileStatus">
+            No log loaded
           </div>
 
-          <div>
-            <span class="label">File Size</span>
-            <strong id="summaryFileSize">---</strong>
+          <div class="flight-picker" id="flightPicker" hidden>
+            <span class="label">Flight in this file</span>
+            <select id="flightSelect"></select>
           </div>
 
-          <div>
-            <span class="label">Status</span>
-            <strong id="summaryStatus">Waiting for log</strong>
+          <div class="decode-info" id="decodeInfo"></div>
+        </section>
+
+        <section class="card">
+          <h3>Flight Summary</h3>
+          <div class="summary-grid">
+            <div>
+              <span class="label">File Name</span>
+              <strong id="summaryFileName">---</strong>
+            </div>
+
+            <div>
+              <span class="label">File Size</span>
+              <strong id="summaryFileSize">---</strong>
+            </div>
+
+            <div>
+              <span class="label">Status</span>
+              <strong id="summaryStatus">Waiting for log</strong>
+            </div>
           </div>
-        </div>
+        </section>
+
+        <section class="card">
+          <h3>Telemetry Columns</h3>
+          <pre id="telemetryColumns">No telemetry loaded.</pre>
+        </section>
+
+        <section class="card">
+          <h3>Raw Log Preview</h3>
+          <pre id="rawPreview">No log loaded</pre>
+        </section>
       </section>
-<section class="card" id="filterLabSection">
-  <h3>Filter Lab</h3>
 
-  <div class="summary-grid">
-    <div>
-      <span class="label">Status</span>
-      <strong id="filterAnalysisStatus">Waiting for analysis</strong>
-    </div>
+      <!-- ============ LOG VIEWER ============ -->
+      <section data-screen="viewer">
+        <section class="hero">
+          <h2>Log Viewer</h2>
+          <p>Your flight, drawn. Drag to zoom, double-click to reset.</p>
+        </section>
 
-    <div>
-      <span class="label">Score</span>
-      <strong id="filterAnalysisScore">---</strong>
-    </div>
+        <section class="card">
+          <h3>Gyro</h3>
+          <p class="chart-hint">
+            What the helicopter actually did on each axis.
+          </p>
+          <div class="chart-container" id="chartGyro">
+            <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+        </section>
 
-    <div>
-      <span class="label">Confidence</span>
-      <strong id="filterAnalysisConfidence">---</strong>
-    </div>
-  </div>
+        <section class="card">
+          <h3>Setpoint vs Gyro</h3>
+          <p class="chart-hint">
+            What you asked for versus what you got — the heart of tuning.
+          </p>
+          <div class="chart-container" id="chartTracking">
+            <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+        </section>
 
-  
-  <div id="filterAnalysisFindings">
-    No filter analysis loaded.
-  </div>
+        <section class="card">
+          <h3>Headspeed &amp; Governor</h3>
+          <p class="chart-hint">
+            Rotor speed stability across the flight.
+          </p>
+          <div class="chart-container" id="chartHeadspeed">
+            <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+        </section>
 
-  <h4>Recommendations</h4>
-  <div id="filterAnalysisRecommendations">
-    No recommendations available.
-  </div>
-</section>
-<section class="card" id="pidLabSection">
-  <h3>PID Lab</h3>
-
-  <div class="summary-grid">
-    <div>
-      <span class="label">Status</span>
-      <strong id="pidAnalysisStatus">Waiting for analysis</strong>
-    </div>
-
-    <div>
-      <span class="label">Score</span>
-      <strong id="pidAnalysisScore">---</strong>
-    </div>
-
-    <div>
-      <span class="label">Confidence</span>
-      <strong id="pidAnalysisConfidence">---</strong>
-    </div>
-  </div>
-
-  <div id="pidAnalysisFindings">
-    No PID analysis loaded.
-  </div>
-
-  <h4>Recommendations</h4>
-
-  <div id="pidAnalysisRecommendations">
-    No recommendations available.
-  </div>
-</section>
-      <section class="card">
-        <h3>Raw Log Preview</h3>
-        <pre id="rawPreview">No log loaded</pre>
+        <section class="card">
+          <h3>Motor &amp; Power</h3>
+          <p class="chart-hint">
+            Throttle output, voltage and current draw.
+          </p>
+          <div class="chart-container" id="chartPower">
+            <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+        </section>
       </section>
+
+      <!-- ============ FILTER LAB ============ -->
+      <section data-screen="filter">
+        <section class="hero">
+          <h2>Filter Lab</h2>
+          <p>Find the noise, understand the noise, filter the noise.</p>
+        </section>
+
+        <section class="card">
+          <h3>Noise Spectrum</h3>
+          <p class="chart-hint">
+            Vibration by frequency. Sharp peaks are mechanical
+            (main rotor, tail, motor) — broad hills are electrical
+            noise. This is what your filters are fighting.
+          </p>
+          <div class="chart-container" id="chartSpectrum">
+            <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+        </section>
+
+        <section class="card" id="filterLabSection">
+          <h3>Filter Analysis</h3>
+
+          <div class="summary-grid">
+            <div>
+              <span class="label">Status</span>
+              <strong id="filterAnalysisStatus">Waiting for analysis</strong>
+            </div>
+
+            <div>
+              <span class="label">Score</span>
+              <strong id="filterAnalysisScore">---</strong>
+            </div>
+
+            <div>
+              <span class="label">Confidence</span>
+              <strong id="filterAnalysisConfidence">---</strong>
+            </div>
+          </div>
+
+          <div id="filterAnalysisFindings">
+            No filter analysis loaded.
+          </div>
+
+          <h4>Recommendations</h4>
+          <div id="filterAnalysisRecommendations">
+            No recommendations available.
+          </div>
+        </section>
+      </section>
+
+      <!-- ============ PID LAB ============ -->
+      <section data-screen="pid">
+        <section class="hero">
+          <h2>PID Lab</h2>
+          <p>How faithfully your helicopter follows your hands.</p>
+        </section>
+
+        <section class="card" id="pidLabSection">
+          <h3>PID Analysis</h3>
+
+          <div class="summary-grid">
+            <div>
+              <span class="label">Status</span>
+              <strong id="pidAnalysisStatus">Waiting for analysis</strong>
+            </div>
+
+            <div>
+              <span class="label">Score</span>
+              <strong id="pidAnalysisScore">---</strong>
+            </div>
+
+            <div>
+              <span class="label">Confidence</span>
+              <strong id="pidAnalysisConfidence">---</strong>
+            </div>
+          </div>
+
+          <div id="pidAnalysisFindings">
+            No PID analysis loaded.
+          </div>
+
+          <h4>Recommendations</h4>
+
+          <div id="pidAnalysisRecommendations">
+            No recommendations available.
+          </div>
+        </section>
+      </section>
+
+      <!-- ============ COMING SOON LABS ============ -->
+      <section data-screen="governor">
+        <section class="hero">
+          <h2>Governor Lab</h2>
+          <p>Headspeed tracking analysis — on the roadmap.</p>
+        </section>
+        <section class="card">
+          <p>
+            Headspeed data already appears in the Log Viewer.
+            Dedicated governor scoring lands here next.
+          </p>
+        </section>
+      </section>
+
+      <section data-screen="esc">
+        <section class="hero">
+          <h2>ESC Lab</h2>
+          <p>ESC health and headroom — on the roadmap.</p>
+        </section>
+        <section class="card">
+          <p>
+            Voltage and current traces already appear in the Log
+            Viewer. Dedicated ESC analysis lands here next.
+          </p>
+        </section>
+      </section>
+
+      <section data-screen="battery">
+        <section class="hero">
+          <h2>Battery Lab</h2>
+          <p>Efficiency and endurance — on the roadmap.</p>
+        </section>
+        <section class="card">
+          <p>Battery performance reports land here next.</p>
+        </section>
+      </section>
+
+      <section data-screen="reports">
+        <section class="hero">
+          <h2>Reports</h2>
+          <p>One-click professional reports — on the roadmap.</p>
+        </section>
+        <section class="card">
+          <p>
+            Findings, evidence, confidence and recommendations,
+            exportable for forums or support requests.
+          </p>
+        </section>
+      </section>
+
+      <section data-screen="settings">
+        <section class="hero">
+          <h2>Settings</h2>
+          <p>Beginner and advanced modes — on the roadmap.</p>
+        </section>
+        <section class="card">
+          <p>Simple first. Deeper when you want it.</p>
+        </section>
+      </section>
+
     </main>
   </div>
 

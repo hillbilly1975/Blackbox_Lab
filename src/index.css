@@ -63,3 +63,58 @@ button:hover {
   color: #9ecbff;
   background: #08111f;
 }
+
+/* ======================================================
+   v0.2 — screens, charts, flight picker
+   ====================================================== */
+
+[data-screen] {
+  display: none;
+}
+
+[data-screen].screen-active {
+  display: block;
+}
+
+.chart-container {
+  min-height: 120px;
+  margin-top: 12px;
+}
+
+.chart-container .u-legend {
+  color: #c7d6f2;
+  font-size: 12px;
+}
+
+.chart-empty {
+  color: #6d82a6;
+  font-style: italic;
+}
+
+.chart-hint {
+  color: #9db4d8;
+  font-size: 13px;
+  margin: 4px 0 0 0;
+}
+
+.flight-picker {
+  margin-top: 14px;
+}
+
+.flight-picker select {
+  display: block;
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: #101c31;
+  color: #eaf2ff;
+  border: 1px solid #274d80;
+  border-radius: 8px;
+  width: 100%;
+  font-size: 14px;
+}
+
+.decode-info {
+  margin-top: 10px;
+  color: #7fb7ff;
+  font-size: 13px;
+}
