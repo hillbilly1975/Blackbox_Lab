@@ -1,0 +1,29 @@
+[
+  {
+    "file": "sample-clean-tuned.bbl",
+    "preset": "clean-tuned",
+    "description": "Well-tuned 700-class heli: light vibration, crisp tracking",
+    "sampleRateHz": 2000,
+    "headspeedTarget": 1820,
+    "expectedMainRotorPeakHz": 30.3,
+    "expectedTailPeakHz": 139.5
+  },
+  {
+    "file": "sample-vibration-problem.bbl",
+    "preset": "vibration-problem",
+    "description": "Mechanical trouble: strong 1/rev (imbalance) + tail resonance",
+    "sampleRateHz": 2000,
+    "headspeedTarget": 1780,
+    "expectedMainRotorPeakHz": 29.7,
+    "expectedTailPeakHz": 136.5
+  },
+  {
+    "file": "sample-governor-sag.bbl",
+    "preset": "governor-sag",
+    "description": "Weak governor: headspeed droops hard under collective load",
+    "sampleRateHz": 2000,
+    "headspeedTarget": 1850,
+    "expectedMainRotorPeakHz": 30.8,
+    "expectedTailPeakHz": 141.8
+  }
+]
