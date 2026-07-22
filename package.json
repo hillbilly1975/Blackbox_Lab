@@ -1,8 +1,8 @@
 {
-  "name": "source",
-  "productName": "source",
-  "version": "1.0.0",
-  "description": "My Electron application description",
+  "name": "blackbox-lab",
+  "productName": "Blackbox Lab",
+  "version": "0.3.0",
+  "description": "Rotorflight Blackbox analysis suite \u2014 simple first, deeper when you want it.",
   "main": "src/index.js",
   "private": true,
   "scripts": {
@@ -10,16 +10,25 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "echo \"No linting configured\""
+    "lint": "echo \"No linting configured\"",
+    "test": "node --test",
+    "generate-samples": "node tools/generateSampleLog.mjs"
   },
-  "keywords": [],
+  "keywords": [
+    "rotorflight",
+    "blackbox",
+    "helicopter",
+    "log-analysis",
+    "electron"
+  ],
   "author": {
     "name": "hillbilly1975",
     "email": "dlsinkjr22@gmail.com"
   },
   "license": "MIT",
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-squirrel-startup": "^1.0.1",
+    "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.2",
@@ -30,6 +39,7 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.11.2",
     "@electron-forge/plugin-fuses": "^7.11.2",
     "@electron/fuses": "^1.8.0",
-    "electron": "43.1.0"
+    "electron": "43.1.0",
+    "playwright-core": "^1.61.1"
   }
 }

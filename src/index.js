@@ -1,4 +1,5 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
+const fs = require('node:fs');
 const path = require('node:path');
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -26,6 +27,33 @@ const createWindow = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
+// ---- sample flights bridge (read-only, whitelisted) ----
+const samplesDirectory = path.join(__dirname, '..', 'samples');
+
+ipcMain.handle('list-sample-logs', () => {
+  try {
+    return fs
+      .readdirSync(samplesDirectory)
+      .filter((name) => name.toLowerCase().endsWith('.bbl'));
+  } catch {
+    return [];
+  }
+});
+
+ipcMain.handle('read-sample-log', (event, name) => {
+  const safeName = path.basename(String(name));
+
+  if (!safeName.toLowerCase().endsWith('.bbl')) {
+    return null;
+  }
+
+  try {
+    return fs.readFileSync(path.join(samplesDirectory, safeName));
+  } catch {
+    return null;
+  }
+});
+
 app.whenReady().then(() => {
   createWindow();
 
