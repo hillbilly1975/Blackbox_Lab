@@ -49,6 +49,34 @@ body {
   padding: 26px 18px;
   border-right: 1px solid var(--line-soft);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 22px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.credit-line {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.credit-name {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.credit-sub {
+  color: var(--ink-muted);
+  font-size: 11.5px;
+  margin-top: 3px;
 }
 
 .sidebar h1 {
