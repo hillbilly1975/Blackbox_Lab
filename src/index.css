@@ -1,8 +1,38 @@
+/* ======================================================
+   BLACKBOX LAB — STYLES
+   Dark & blue (the original soul), tuned to feel
+   friendly: soft corners, calm contrast, generous air.
+   ====================================================== */
+
+:root {
+  --bg: #070b12;
+  --panel: #0d1524;
+  --card: #101a2c;
+  --card-soft: #12203a;
+  --line: #22365a;
+  --line-soft: #1a2a47;
+  --ink: #eef3ff;
+  --ink-soft: #b9c9e6;
+  --ink-muted: #7e93b8;
+  --accent: #6fb2ff;
+  --accent-strong: #3f8ef0;
+  --good: #3ecf8e;
+  --watch: #f2c14e;
+  --attention: #ff8a6b;
+  --radius: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  font-family: Segoe UI, Arial, sans-serif;
-  background: #05070b;
-  color: #f5f7ff;
+  font-family: "Segoe UI", system-ui, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .app {
@@ -10,92 +40,194 @@ body {
   height: 100vh;
 }
 
+/* ---------------- sidebar ---------------- */
+
 .sidebar {
-  width: 260px;
-  background: #0b1220;
-  padding: 24px;
-  border-right: 1px solid #1c355a;
+  width: 250px;
+  flex-shrink: 0;
+  background: var(--panel);
+  padding: 26px 18px;
+  border-right: 1px solid var(--line-soft);
+  overflow-y: auto;
 }
 
 .sidebar h1 {
   margin: 0;
+  font-size: 24px;
   color: #ffffff;
+  letter-spacing: 0.3px;
 }
 
 .tagline {
-  color: #7fb7ff;
-  margin-bottom: 28px;
+  color: var(--accent);
+  margin: 4px 0 26px 0;
+  font-size: 13px;
 }
 
 button {
-  display: block;
-  width: 100%;
-  margin: 10px 0;
-  padding: 12px;
-  background: #101c31;
-  color: #eaf2ff;
-  border: 1px solid #274d80;
-  border-radius: 8px;
-  text-align: left;
+  font-family: inherit;
+  font-size: 14px;
   cursor: pointer;
 }
 
-button:hover {
-  background: #17345a;
+.nav-button {
+  display: block;
+  width: 100%;
+  margin: 6px 0;
+  padding: 11px 14px;
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
 }
+
+.nav-button:hover {
+  background: var(--card-soft);
+  color: var(--ink);
+}
+
+.nav-button.active {
+  background: var(--card-soft);
+  color: #ffffff;
+  border-color: var(--line);
+}
+
+/* ---------------- workspace ---------------- */
 
 .workspace {
   flex: 1;
-  padding: 40px;
+  padding: 34px 42px 60px 42px;
+  overflow-y: auto;
+}
+
+.hero {
+  margin-bottom: 22px;
 }
 
 .workspace h2 {
-  font-size: 34px;
-  margin-top: 0;
+  font-size: 30px;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.3px;
 }
 
-.drop-zone {
-  margin-top: 32px;
-  padding: 60px;
-  border: 2px dashed #2d72c9;
-  border-radius: 16px;
-  text-align: center;
-  color: #9ecbff;
-  background: #08111f;
+.hero p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 15px;
 }
 
-/* ======================================================
-   v0.2 — screens, charts, flight picker
-   ====================================================== */
-
-[data-screen] {
-  display: none;
+.card {
+  background: var(--card);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  margin-bottom: 18px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
 }
 
-[data-screen].screen-active {
+.card h3 {
+  margin: 0 0 10px 0;
+  font-size: 18px;
+}
+
+.card h4 {
+  margin: 18px 0 8px 0;
+  color: var(--ink-soft);
+}
+
+.card p {
+  color: var(--ink-soft);
+  margin: 0 0 10px 0;
+}
+
+.label {
   display: block;
-}
-
-.chart-container {
-  min-height: 120px;
-  margin-top: 12px;
-}
-
-.chart-container .u-legend {
-  color: #c7d6f2;
+  color: var(--ink-muted);
   font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 2px;
 }
 
-.chart-empty {
-  color: #6d82a6;
-  font-style: italic;
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
 }
 
-.chart-hint {
-  color: #9db4d8;
+pre {
+  background: #0a111f;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+/* ---------------- buttons ---------------- */
+
+.button-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 14px 0 4px 0;
+}
+
+.primary-button,
+.secondary-button {
+  display: inline-block;
+  width: auto;
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-weight: 600;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.primary-button {
+  background: linear-gradient(180deg, #4f9bf5, var(--accent-strong));
+  color: #ffffff;
+  border: none;
+}
+
+.primary-button:hover {
+  background: linear-gradient(180deg, #5ea7ff, #4a97f4);
+  transform: translateY(-1px);
+}
+
+.primary-button:disabled {
+  background: var(--card-soft);
+  color: var(--ink-muted);
+  cursor: default;
+  transform: none;
+}
+
+.secondary-button {
+  background: var(--card-soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.secondary-button:hover {
+  background: #17294a;
+  transform: translateY(-1px);
+}
+
+.file-status {
+  margin-top: 12px;
+  color: var(--ink-muted);
+  font-size: 13.5px;
+}
+
+.decode-info {
+  margin-top: 8px;
+  color: var(--accent);
   font-size: 13px;
-  margin: 4px 0 0 0;
 }
+
+/* ---------------- flight picker ---------------- */
 
 .flight-picker {
   margin-top: 14px;
@@ -104,17 +236,211 @@ button:hover {
 .flight-picker select {
   display: block;
   margin-top: 6px;
-  padding: 10px 12px;
-  background: #101c31;
-  color: #eaf2ff;
-  border: 1px solid #274d80;
-  border-radius: 8px;
+  padding: 10px 14px;
+  background: var(--card-soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
   width: 100%;
   font-size: 14px;
 }
 
-.decode-info {
+/* ---------------- verdict ---------------- */
+
+#verdictCard {
+  border-color: var(--line);
+  background: linear-gradient(180deg, #13203a, var(--card));
+}
+
+.verdict-summary {
+  font-size: 17px;
+  color: var(--ink);
+  margin: 0 0 14px 0;
+}
+
+.verdict-item {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 10px 0;
+  background: var(--card-soft);
+}
+
+.verdict-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-good .status-dot { background: var(--good); }
+.status-watch .status-dot { background: var(--watch); }
+.status-attention .status-dot { background: var(--attention); }
+
+.verdict-item-title {
+  font-weight: 700;
+}
+
+.verdict-item-status {
+  margin-left: auto;
+  font-size: 12px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.status-good .verdict-item-status { color: var(--good); }
+.status-watch .verdict-item-status { color: var(--watch); }
+.status-attention .verdict-item-status { color: var(--attention); }
+
+.verdict-item-headline {
+  font-size: 16px;
+  font-weight: 650;
+  margin-bottom: 4px;
+}
+
+.verdict-item-detail {
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.verdict-item-action {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--ink-soft);
+  background: rgba(111, 178, 255, 0.07);
+  border-left: 3px solid var(--accent);
+  padding: 8px 12px;
+  border-radius: 0 8px 8px 0;
+}
+
+.verdict-item-action span {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.verdict-jump {
   margin-top: 10px;
-  color: #7fb7ff;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 7px 16px;
   font-size: 13px;
+}
+
+.verdict-jump:hover {
+  background: rgba(111, 178, 255, 0.1);
+}
+
+/* ---------------- labs ---------------- */
+
+.lab-story {
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.status-text-good { border-left: 3px solid var(--good); padding-left: 12px; }
+.status-text-watch { border-left: 3px solid var(--watch); padding-left: 12px; }
+.status-text-attention { border-left: 3px solid var(--attention); padding-left: 12px; }
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.metric-tile {
+  background: var(--card-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.metric-tile strong {
+  font-size: 16px;
+}
+
+/* ---------------- charts ---------------- */
+
+.chart-container {
+  min-height: 120px;
+  margin-top: 12px;
+}
+
+.chart-container .u-legend {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.chart-empty {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+.chart-hint {
+  color: var(--ink-muted);
+  font-size: 13px;
+  margin: 2px 0 0 0;
+}
+
+/* ---------------- drill-downs & advanced ---------------- */
+
+details.drilldown summary,
+details.advanced-block summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 14px;
+  padding: 4px 0;
+  user-select: none;
+}
+
+details.drilldown[open] summary,
+details.advanced-block[open] summary {
+  margin-bottom: 12px;
+}
+
+details.advanced-block {
+  display: none;
+}
+
+body.advanced-mode details.advanced-block {
+  display: block;
+}
+
+/* ---------------- settings ---------------- */
+
+.toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  color: var(--ink-soft);
+}
+
+.toggle-row input {
+  margin-top: 4px;
+  transform: scale(1.3);
+  accent-color: var(--accent-strong);
+}
+
+.glossary {
+  line-height: 1.9;
+}
+
+/* ---------------- screens ---------------- */
+
+[data-screen] {
+  display: none;
+}
+
+[data-screen].screen-active {
+  display: block;
 }

@@ -1,2 +1,16 @@
-// See the Electron documentation for details on how to use preload scripts:
-// https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
+// ======================================================
+// BLACKBOX LAB — PRELOAD
+// ======================================================
+//
+// Exposes a minimal, safe bridge to the renderer:
+// reading the bundled sample flights (so "Try a sample"
+// works with one click, no file dialog).
+//
+// ======================================================
+
+const { contextBridge, ipcRenderer } = require("electron");
+
+contextBridge.exposeInMainWorld("blackboxLab", {
+  readSampleLog: (name) => ipcRenderer.invoke("read-sample-log", name),
+  listSampleLogs: () => ipcRenderer.invoke("list-sample-logs")
+});

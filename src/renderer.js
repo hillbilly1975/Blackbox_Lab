@@ -9,70 +9,110 @@ import {
   renderSpectrumChart,
   CHART_COLORS
 } from "./ui/charts.js";
+import { buildReportHtml, downloadReport } from "./ui/reportBuilder.js";
 import { readLogFile } from "./analysis/logFileReader.js";
 import { buildLogAnalysis } from "./analysis/logAnalysisBuilder.js";
 import { findTelemetryHeaderIndex } from "./analysis/telemetryHeader.js";
 import { getColumnValues } from "./analysis/mathHelpers.js";
+import { getMetadataValue } from "./analysis/metadataReader.js";
 import {
   computeNoiseSpectrum,
   estimateSampleRate
 } from "./analysis/dsp/fft.js";
+import { buildFlightVerdict } from "./analysis/flightVerdict.js";
+import { analyzeGovernorLab } from "./analysis/governorLabAnalysis.js";
+import { analyzeEscLab } from "./analysis/escLabAnalysis.js";
+import { analyzeBatteryLab } from "./analysis/batteryLabAnalysis.js";
 //
 // SECTION MAP
 // 01. DOM REFERENCES
-// 02. NAVIGATION
-// 03. FILE PICKER
+// 02. NAVIGATION + SETTINGS
+// 03. FILE PICKER + SAMPLE FLIGHT
 // 04. FLIGHT SELECTION
-// 05. CHART DATA HELPERS
-// 06. CHART RENDERING
-// 07. ANALYSIS + SCREEN UPDATE
+// 05. DATASET (columns, spectra, labs, verdict)
+// 06. RENDERING (charts, labs, verdict)
+// 07. REPORT BUILDER
 //
 // ======================================================
 //
 // 01. DOM REFERENCES
 // ======================================================
 
-const chooseFileButton = document.getElementById("chooseFileButton");
-const openLogButton = document.getElementById("openLogButton");
-const logFileInput = document.getElementById("logFileInput");
+const el = (id) => document.getElementById(id);
 
-const fileStatus = document.getElementById("fileStatus");
-const flightPicker = document.getElementById("flightPicker");
-const flightSelect = document.getElementById("flightSelect");
-const decodeInfo = document.getElementById("decodeInfo");
+const chooseFileButton = el("chooseFileButton");
+const openLogButton = el("openLogButton");
+const trySampleButton = el("trySampleButton");
+const logFileInput = el("logFileInput");
 
-const summaryFileName = document.getElementById("summaryFileName");
-const summaryFileSize = document.getElementById("summaryFileSize");
-const summaryStatus = document.getElementById("summaryStatus");
-const rawPreview = document.getElementById("rawPreview");
-const telemetryColumns = document.getElementById("telemetryColumns");
+const fileStatus = el("fileStatus");
+const flightPicker = el("flightPicker");
+const flightSelect = el("flightSelect");
+const decodeInfo = el("decodeInfo");
 
-const filterAnalysisStatus = document.getElementById("filterAnalysisStatus");
-const filterAnalysisScore = document.getElementById("filterAnalysisScore");
-const filterAnalysisConfidence = document.getElementById("filterAnalysisConfidence");
-const filterAnalysisFindings = document.getElementById("filterAnalysisFindings");
-const filterAnalysisRecommendations = document.getElementById("filterAnalysisRecommendations");
+const summaryFileName = el("summaryFileName");
+const summaryFileSize = el("summaryFileSize");
+const summaryStatus = el("summaryStatus");
+const rawPreview = el("rawPreview");
+const telemetryColumns = el("telemetryColumns");
 
-const pidAnalysisStatus = document.getElementById("pidAnalysisStatus");
-const pidAnalysisScore = document.getElementById("pidAnalysisScore");
-const pidAnalysisConfidence = document.getElementById("pidAnalysisConfidence");
-const pidAnalysisFindings = document.getElementById("pidAnalysisFindings");
-const pidAnalysisRecommendations = document.getElementById("pidAnalysisRecommendations");
+const verdictCard = el("verdictCard");
+const verdictSummary = el("verdictSummary");
+const verdictCards = el("verdictCards");
 
-const chartGyro = document.getElementById("chartGyro");
-const chartTracking = document.getElementById("chartTracking");
-const chartHeadspeed = document.getElementById("chartHeadspeed");
-const chartPower = document.getElementById("chartPower");
-const chartSpectrum = document.getElementById("chartSpectrum");
+const filterAnalysisStatus = el("filterAnalysisStatus");
+const filterAnalysisScore = el("filterAnalysisScore");
+const filterAnalysisConfidence = el("filterAnalysisConfidence");
+const filterAnalysisFindings = el("filterAnalysisFindings");
+const filterAnalysisRecommendations = el("filterAnalysisRecommendations");
+
+const pidAnalysisStatus = el("pidAnalysisStatus");
+const pidAnalysisScore = el("pidAnalysisScore");
+const pidAnalysisConfidence = el("pidAnalysisConfidence");
+const pidAnalysisFindings = el("pidAnalysisFindings");
+const pidAnalysisRecommendations = el("pidAnalysisRecommendations");
+
+const chartGyro = el("chartGyro");
+const chartTracking = el("chartTracking");
+const chartHeadspeed = el("chartHeadspeed");
+const chartPower = el("chartPower");
+const chartSpectrum = el("chartSpectrum");
+const chartGovernor = el("chartGovernor");
+const chartEsc = el("chartEsc");
+const chartBattery = el("chartBattery");
+
+const governorStory = el("governorStory");
+const governorMetrics = el("governorMetrics");
+const escStory = el("escStory");
+const escMetrics = el("escMetrics");
+const batteryStory = el("batteryStory");
+const batteryMetrics = el("batteryMetrics");
+
+const buildReportButton = el("buildReportButton");
+const reportStatus = el("reportStatus");
+const advancedModeToggle = el("advancedModeToggle");
 
 // ======================================================
-// 02. NAVIGATION
+// 02. NAVIGATION + SETTINGS
 // ======================================================
 
-initNavigation();
+const navigation = initNavigation();
+
+function applyAdvancedMode(enabled) {
+  document.body.classList.toggle("advanced-mode", enabled);
+  localStorage.setItem("blackboxLabAdvanced", enabled ? "1" : "0");
+}
+
+advancedModeToggle.checked =
+  localStorage.getItem("blackboxLabAdvanced") === "1";
+applyAdvancedMode(advancedModeToggle.checked);
+
+advancedModeToggle.addEventListener("change", () => {
+  applyAdvancedMode(advancedModeToggle.checked);
+});
 
 // ======================================================
-// 03. FILE PICKER
+// 03. FILE PICKER + SAMPLE FLIGHT
 // ======================================================
 
 function openFilePicker() {
@@ -84,8 +124,8 @@ openLogButton.addEventListener("click", openFilePicker);
 
 let loadedLog = null;
 
-logFileInput.addEventListener("change", async () => {
-  const logData = await readLogFile(logFileInput.files[0]);
+async function loadFromFile(file) {
+  const logData = await readLogFile(file);
 
   if (!logData || logData.flights.length === 0) {
     fileStatus.textContent =
@@ -94,10 +134,6 @@ logFileInput.addEventListener("change", async () => {
   }
 
   loadedLog = logData;
-
-  // ====================================================
-  // 04. FLIGHT SELECTION
-  // ====================================================
 
   flightSelect.innerHTML = "";
 
@@ -111,6 +147,41 @@ logFileInput.addEventListener("change", async () => {
   flightPicker.hidden = logData.flights.length < 2;
 
   analyzeFlight(0);
+}
+
+logFileInput.addEventListener("change", () => {
+  if (logFileInput.files[0]) {
+    loadFromFile(logFileInput.files[0]);
+  }
+});
+
+trySampleButton.addEventListener("click", async () => {
+  if (!window.blackboxLab) {
+    fileStatus.textContent =
+      "Samples are available when running the desktop app.";
+    return;
+  }
+
+  fileStatus.textContent = "Loading sample flight...";
+
+  const bytes = await window.blackboxLab.readSampleLog(
+    "sample-vibration-problem.bbl"
+  );
+
+  if (!bytes) {
+    fileStatus.textContent = "Could not load the sample flight.";
+    return;
+  }
+
+  const file = new File(
+    [new Uint8Array(bytes)],
+    "sample-vibration-problem.bbl"
+  );
+
+  await loadFromFile(file);
+
+  fileStatus.textContent =
+    "Loaded: sample flight (a helicopter with a mechanical problem — can you find it?)";
 });
 
 flightSelect.addEventListener("change", () => {
@@ -120,7 +191,7 @@ flightSelect.addEventListener("change", () => {
 });
 
 // ======================================================
-// 05. CHART DATA HELPERS
+// 04. DATASET
 // ======================================================
 
 function findColumns(headerLine, patterns) {
@@ -131,8 +202,6 @@ function findColumns(headerLine, patterns) {
   );
 }
 
-// Sample long flights down to a plottable size while
-// keeping the shape of the signal.
 function decimate(values, maximumPoints = 60000) {
   if (values.length <= maximumPoints) {
     return values;
@@ -148,7 +217,17 @@ function decimate(values, maximumPoints = 60000) {
   return output;
 }
 
-function buildChartData(lines) {
+function averageOf(values) {
+  let sum = 0;
+
+  for (const value of values) {
+    sum += value;
+  }
+
+  return values.length ? sum / values.length : null;
+}
+
+function buildDataset(lines, pidAnalysis) {
   const headerIndex = findTelemetryHeaderIndex(lines);
 
   if (headerIndex < 0) {
@@ -156,104 +235,33 @@ function buildChartData(lines) {
   }
 
   const headerLine = lines[headerIndex];
+  const columnValues = (name) => getColumnValues(lines, headerIndex, name);
+  const firstColumn = (patterns) => {
+    const matches = findColumns(headerLine, patterns);
+    return matches.length ? columnValues(matches[0]) : null;
+  };
 
-  const columnValues = (name) =>
-    getColumnValues(lines, headerIndex, name);
+  const timeColumnName = findColumns(headerLine, [/^time/i])[0];
 
-  const timeColumn = findColumns(headerLine, [/^time/i])[0];
-
-  if (!timeColumn) {
+  if (!timeColumnName) {
     return null;
   }
 
-  const timeMicroseconds = columnValues(timeColumn);
+  const timeMicroseconds = columnValues(timeColumnName);
   const startTime = timeMicroseconds[0] ?? 0;
   const timeSeconds = timeMicroseconds.map(
     (value) => (value - startTime) / 1_000_000
   );
 
-  return {
-    headerLine,
-    headerIndex,
-    timeMicroseconds,
-    timeSeconds,
-    columnValues
-  };
-}
+  const headspeed = firstColumn([/headspeed/i, /^rpm/i]);
+  const governorTarget = firstColumn([/governorTarget/i, /govTarget/i, /governor/i]);
+  const vbat = firstColumn([/vbat/i]);
+  const amperage = firstColumn([/amperage/i, /current/i]);
+  const motor = firstColumn([/^motor\[0\]/i]);
 
-// ======================================================
-// 06. CHART RENDERING
-// ======================================================
-
-function renderSeriesChart(element, chartData, patterns, options = {}) {
-  const columns = findColumns(chartData.headerLine, patterns).slice(0, 6);
-
-  if (columns.length === 0) {
-    element.innerHTML =
-      '<p class="chart-empty">This log has no data for this chart.</p>';
-    return;
-  }
-
-  const series = columns.map((name, index) => ({
-    label: name,
-    values: decimate(chartData.columnValues(name)),
-    color: CHART_COLORS[index % CHART_COLORS.length]
-  }));
-
-  renderTimeSeriesChart(element, {
-    timeSeconds: decimate(chartData.timeSeconds),
-    series,
-    yLabel: options.yLabel ?? ""
-  });
-}
-
-function renderAllCharts(lines) {
-  const chartData = buildChartData(lines);
-
-  if (!chartData) {
-    for (const element of [
-      chartGyro,
-      chartTracking,
-      chartHeadspeed,
-      chartPower,
-      chartSpectrum
-    ]) {
-      element.innerHTML =
-        '<p class="chart-empty">No plottable telemetry found in this log.</p>';
-    }
-
-    return;
-  }
-
-  renderSeriesChart(chartGyro, chartData, [/^gyroADC/i, /^gyroUnfilt/i], {
-    yLabel: "deg/s"
-  });
-
-  renderSeriesChart(
-    chartTracking,
-    chartData,
-    [/^setpoint\[0\]/i, /^gyroADC\[0\]/i],
-    { yLabel: "roll axis" }
-  );
-
-  renderSeriesChart(
-    chartHeadspeed,
-    chartData,
-    [/headspeed/i, /^rpm/i, /governor/i],
-    { yLabel: "rpm" }
-  );
-
-  renderSeriesChart(
-    chartPower,
-    chartData,
-    [/^motor\[/i, /vbat/i, /amperage/i, /current/i],
-    { yLabel: "" }
-  );
-
-  // ---- noise spectrum (Filter Lab) ----
-  const sampleRate = estimateSampleRate(chartData.timeMicroseconds);
-
-  const gyroColumns = findColumns(chartData.headerLine, [
+  // ---- spectra + labelled peaks ----
+  const sampleRate = estimateSampleRate(timeMicroseconds);
+  const gyroColumnNames = findColumns(headerLine, [
     /^gyroUnfilt/i,
     /^gyroADC/i
   ]).slice(0, 3);
@@ -261,11 +269,8 @@ function renderAllCharts(lines) {
   const spectra = [];
 
   if (sampleRate) {
-    gyroColumns.forEach((name, index) => {
-      const spectrum = computeNoiseSpectrum(
-        chartData.columnValues(name),
-        sampleRate
-      );
+    gyroColumnNames.forEach((name, index) => {
+      const spectrum = computeNoiseSpectrum(columnValues(name), sampleRate);
 
       if (spectrum) {
         spectra.push({
@@ -277,8 +282,249 @@ function renderAllCharts(lines) {
     });
   }
 
-  if (spectra.length > 0) {
-    renderSpectrumChart(chartSpectrum, spectra);
+  const governedHeadspeed = headspeed
+    ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
+    : null;
+
+  const markers = buildSpectrumMarkers(spectra, governedHeadspeed);
+
+  // ---- labs + verdict ----
+  const labs = {
+    governor: analyzeGovernorLab({ timeSeconds, headspeed, governorTarget }),
+    esc: analyzeEscLab({ motor, amperage, vbat }),
+    battery: analyzeBatteryLab({ timeSeconds, vbat, amperage })
+  };
+
+  const verdict = buildFlightVerdict({
+    spectra,
+    headspeed,
+    governorTarget,
+    vbat,
+    pidAnalysis
+  });
+
+  return {
+    headerLine,
+    timeSeconds,
+    columnValues,
+    findColumnsIn: (patterns) => findColumns(headerLine, patterns),
+    headspeed,
+    governorTarget,
+    vbat,
+    amperage,
+    spectra,
+    markers,
+    labs,
+    verdict
+  };
+}
+
+function buildSpectrumMarkers(spectra, headspeedRpm) {
+  if (!spectra.length) {
+    return [];
+  }
+
+  // Strongest axis carries the story.
+  let strongest = spectra[0];
+
+  for (const entry of spectra) {
+    const peak = Math.max(...entry.spectrum.magnitudes);
+    if (peak > Math.max(...strongest.spectrum.magnitudes)) {
+      strongest = entry;
+    }
+  }
+
+  const { frequencies, magnitudes } = strongest.spectrum;
+  const peaks = [];
+
+  for (let i = 2; i < frequencies.length - 2; i += 1) {
+    if (
+      frequencies[i] > 10 &&
+      magnitudes[i] > magnitudes[i - 1] &&
+      magnitudes[i] > magnitudes[i + 1]
+    ) {
+      peaks.push({ hz: frequencies[i], magnitude: magnitudes[i] });
+    }
+  }
+
+  peaks.sort((a, b) => b.magnitude - a.magnitude);
+
+  const chosen = [];
+
+  for (const peak of peaks) {
+    if (chosen.every((other) => Math.abs(other.hz - peak.hz) > 8)) {
+      chosen.push(peak);
+    }
+
+    if (chosen.length === 3) {
+      break;
+    }
+  }
+
+  return chosen.map((peak) => {
+    let name = `${peak.hz.toFixed(0)} Hz`;
+
+    if (headspeedRpm && headspeedRpm > 300) {
+      const ratio = peak.hz / (headspeedRpm / 60);
+
+      if (Math.abs(ratio - 1) < 0.15) name = `main rotor 1/rev · ${name}`;
+      else if (Math.abs(ratio - 2) < 0.2) name = `main rotor 2/rev · ${name}`;
+      else if (ratio > 3.5 && ratio < 6.5) name = `tail region · ${name}`;
+    }
+
+    return { hz: peak.hz, label: name };
+  });
+}
+
+// ======================================================
+// 05. RENDERING
+// ======================================================
+
+const STATUS_WORDS = {
+  good: "Looks good",
+  watch: "Worth watching",
+  attention: "Needs attention"
+};
+
+function renderVerdict(dataset) {
+  const verdict = dataset?.verdict;
+
+  if (!verdict || verdict.cards.length === 0) {
+    verdictCard.hidden = true;
+    return;
+  }
+
+  verdictCard.hidden = false;
+  verdictSummary.textContent = verdict.summary;
+  verdictCards.innerHTML = "";
+
+  for (const card of verdict.cards) {
+    const cardElement = document.createElement("div");
+    cardElement.className = `verdict-item status-${card.status}`;
+
+    cardElement.innerHTML = `
+      <div class="verdict-item-top">
+        <span class="status-dot"></span>
+        <span class="verdict-item-title">${card.title}</span>
+        <span class="verdict-item-status">${STATUS_WORDS[card.status]}</span>
+      </div>
+      <div class="verdict-item-headline">${card.headline}</div>
+      <div class="verdict-item-detail">${card.detail}</div>
+      ${card.action ? `<div class="verdict-item-action"><span>What to do:</span> ${card.action}</div>` : ""}
+    `;
+
+    const button = document.createElement("button");
+    button.className = "verdict-jump";
+    button.textContent = `Show me → ${card.evidence}`;
+    button.addEventListener("click", () =>
+      navigation.showScreen(card.screen)
+    );
+
+    cardElement.appendChild(button);
+    verdictCards.appendChild(cardElement);
+  }
+}
+
+function renderMetricGrid(element, metrics) {
+  element.innerHTML = "";
+
+  for (const metric of metrics) {
+    const tile = document.createElement("div");
+    tile.className = "metric-tile";
+    tile.innerHTML = `<span class="label">${metric.label}</span><strong>${metric.value}</strong>`;
+    element.appendChild(tile);
+  }
+}
+
+function renderLab(analysis, storyElement, metricsElement, emptyText) {
+  if (!analysis) {
+    storyElement.textContent = emptyText;
+    metricsElement.innerHTML = "";
+    return;
+  }
+
+  storyElement.textContent = analysis.story;
+  storyElement.className = `lab-story status-text-${analysis.status}`;
+  renderMetricGrid(metricsElement, analysis.metrics);
+}
+
+function renderSeriesChart(element, dataset, patterns, options = {}) {
+  const columns = dataset.findColumnsIn(patterns).slice(0, 6);
+
+  if (columns.length === 0) {
+    element.innerHTML =
+      '<p class="chart-empty">This log has no data for this chart.</p>';
+    return;
+  }
+
+  const series = columns.map((name, index) => ({
+    label: name,
+    values: decimate(dataset.columnValues(name)),
+    color: CHART_COLORS[index % CHART_COLORS.length]
+  }));
+
+  renderTimeSeriesChart(element, {
+    timeSeconds: decimate(dataset.timeSeconds),
+    series,
+    yLabel: options.yLabel ?? ""
+  });
+}
+
+function renderAllCharts(dataset) {
+  if (!dataset) {
+    for (const element of [
+      chartGyro, chartTracking, chartHeadspeed, chartPower,
+      chartSpectrum, chartGovernor, chartEsc, chartBattery
+    ]) {
+      element.innerHTML =
+        '<p class="chart-empty">No plottable telemetry found in this log.</p>';
+    }
+
+    return;
+  }
+
+  renderSeriesChart(chartGyro, dataset, [/^gyroADC/i, /^gyroUnfilt/i], {
+    yLabel: "deg/s"
+  });
+
+  renderSeriesChart(
+    chartTracking,
+    dataset,
+    [/^setpoint\[0\]/i, /^gyroADC\[0\]/i],
+    { yLabel: "roll axis" }
+  );
+
+  renderSeriesChart(
+    chartHeadspeed,
+    dataset,
+    [/headspeed/i, /^rpm/i, /governor/i],
+    { yLabel: "rpm" }
+  );
+
+  renderSeriesChart(
+    chartPower,
+    dataset,
+    [/^motor\[/i, /vbat/i, /amperage/i, /current/i],
+    { yLabel: "" }
+  );
+
+  renderSeriesChart(
+    chartGovernor,
+    dataset,
+    [/headspeed/i, /governorTarget/i, /govTarget/i],
+    { yLabel: "rpm" }
+  );
+
+  renderSeriesChart(chartEsc, dataset, [/^motor\[/i], { yLabel: "throttle" });
+
+  renderSeriesChart(chartBattery, dataset, [/vbat/i], {
+    yLabel: "voltage (as logged)"
+  });
+
+  if (dataset.spectra.length > 0) {
+    renderSpectrumChart(chartSpectrum, dataset.spectra, {
+      markers: dataset.markers
+    });
   } else {
     chartSpectrum.innerHTML =
       '<p class="chart-empty">Not enough gyro data for a spectrum.</p>';
@@ -286,13 +532,17 @@ function renderAllCharts(lines) {
 }
 
 // ======================================================
-// 07. ANALYSIS + SCREEN UPDATE
+// 06. ANALYSIS + SCREEN UPDATE
 // ======================================================
+
+let currentDataset = null;
+let currentFlightLines = null;
 
 function analyzeFlight(flightIndex) {
   const flight = loadedLog.flights[flightIndex];
   const { file, sizeKb, fileType } = loadedLog;
   const lines = flight.lines;
+  currentFlightLines = lines;
 
   decodeInfo.textContent = flight.decodeInfo
     ? `Binary .bbl decoded natively — ${flight.decodeInfo}`
@@ -335,5 +585,78 @@ function analyzeFlight(flightIndex) {
     rawPreview
   });
 
-  renderAllCharts(lines);
+  currentDataset = buildDataset(lines, pidAnalysis);
+
+  renderVerdict(currentDataset);
+  renderAllCharts(currentDataset);
+
+  renderLab(
+    currentDataset?.labs.governor,
+    governorStory,
+    governorMetrics,
+    "This log has no headspeed/governor data to analyze."
+  );
+  renderLab(
+    currentDataset?.labs.esc,
+    escStory,
+    escMetrics,
+    "This log has no motor data to analyze."
+  );
+  renderLab(
+    currentDataset?.labs.battery,
+    batteryStory,
+    batteryMetrics,
+    "This log has no voltage data to analyze."
+  );
+
+  buildReportButton.disabled = !currentDataset;
+  reportStatus.textContent = currentDataset
+    ? "Ready — the report includes whatever the Labs found."
+    : "Open a log first.";
+
+  // Land the pilot on the answers, not the data.
+  navigation.showScreen("home");
+  document.querySelector(".workspace").scrollTop = 0;
 }
+
+// ======================================================
+// 07. REPORT BUILDER
+// ======================================================
+
+buildReportButton.addEventListener("click", () => {
+  if (!currentDataset || !currentFlightLines) {
+    return;
+  }
+
+  const craftName = getMetadataValue(currentFlightLines, "Craft name");
+  const firmware = getMetadataValue(currentFlightLines, "firmware");
+  const duration =
+    currentDataset.timeSeconds[currentDataset.timeSeconds.length - 1];
+
+  const html = buildReportHtml({
+    fileName: summaryFileName.textContent,
+    craftName: craftName === "Not found" ? null : craftName,
+    firmware: firmware === "Not found" ? null : firmware,
+    durationSeconds: duration,
+    verdict: currentDataset.verdict,
+    labs: [
+      { title: "Governor Lab", analysis: currentDataset.labs.governor },
+      { title: "ESC Lab", analysis: currentDataset.labs.esc },
+      { title: "Battery Lab", analysis: currentDataset.labs.battery }
+    ],
+    chartElements: [
+      { title: "Noise Spectrum", element: chartSpectrum },
+      { title: "Gyro", element: chartGyro },
+      { title: "Setpoint vs Gyro", element: chartTracking },
+      { title: "Headspeed & Governor", element: chartGovernor },
+      { title: "Motor & Power", element: chartPower }
+    ]
+  });
+
+  const baseName = (summaryFileName.textContent || "flight")
+    .replace(/\.[^.]+$/, "");
+
+  downloadReport(html, `blackbox-lab-report-${baseName}.html`);
+  reportStatus.textContent =
+    "Report saved — check your downloads folder.";
+});

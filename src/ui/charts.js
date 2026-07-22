@@ -130,7 +130,7 @@ export function renderTimeSeriesChart(element, options) {
 // Noise spectrum (frequency domain)
 // ------------------------------------------------------
 export function renderSpectrumChart(element, spectra, options = {}) {
-  const { height = 260 } = options;
+  const { height = 260, markers = [] } = options;
 
   destroyExistingChart(element);
 
@@ -147,6 +147,39 @@ export function renderSpectrumChart(element, spectra, options = {}) {
       height,
       padding: [12, 8, 0, 0],
       cursor: { drag: { x: true, y: false } },
+      hooks: {
+        draw: [
+          (u) => {
+            if (!markers.length) {
+              return;
+            }
+
+            const ctx = u.ctx;
+            ctx.save();
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+            ctx.fillStyle = "#dce8ff";
+            ctx.setLineDash([4, 4]);
+            ctx.font = "12px sans-serif";
+            ctx.textAlign = "center";
+
+            for (const marker of markers) {
+              const x = u.valToPos(marker.hz, "x", true);
+
+              if (x < u.bbox.left || x > u.bbox.left + u.bbox.width) {
+                continue;
+              }
+
+              ctx.beginPath();
+              ctx.moveTo(x, u.bbox.top);
+              ctx.lineTo(x, u.bbox.top + u.bbox.height);
+              ctx.stroke();
+              ctx.fillText(marker.label, x, u.bbox.top + 14);
+            }
+
+            ctx.restore();
+          }
+        ]
+      },
       scales: {
         x: { time: false }
       },

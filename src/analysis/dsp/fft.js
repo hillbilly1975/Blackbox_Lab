@@ -127,9 +127,16 @@ export function computeNoiseSpectrum(samples, sampleRateHz, options = {}) {
 
     fftInPlace(real, imag);
 
+    // Amplitude calibration: a pure sine of amplitude A
+    // should read ≈ A in its bin. Factor 2 folds the
+    // negative frequencies; 0.5 is the Hann window's
+    // coherent gain.
+    const scale = 2 / (segmentSize * 0.5);
+
     for (let bin = 0; bin < half; bin += 1) {
-      power[bin] +=
-        (real[bin] * real[bin] + imag[bin] * imag[bin]) / segmentSize;
+      const amplitude =
+        Math.sqrt(real[bin] * real[bin] + imag[bin] * imag[bin]) * scale;
+      power[bin] += amplitude * amplitude;
     }
 
     segments += 1;
