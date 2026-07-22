@@ -65,7 +65,9 @@ export function renderTimeSeriesChart(element, options) {
     timeSeconds,
     series,
     height = 260,
-    yLabel = ""
+    yLabel = "",
+    xLabel = "Flight time (s)",
+    markers = []
   } = options;
 
   destroyExistingChart(element);
@@ -84,13 +86,46 @@ export function renderTimeSeriesChart(element, options) {
         drag: { x: true, y: false },
         points: { size: 7 }
       },
+      hooks: {
+        draw: [
+          (u) => {
+            if (!markers.length) {
+              return;
+            }
+
+            const ctx = u.ctx;
+            ctx.save();
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+            ctx.fillStyle = "#dce8ff";
+            ctx.setLineDash([4, 4]);
+            ctx.font = "12px sans-serif";
+            ctx.textAlign = "center";
+
+            for (const marker of markers) {
+              const x = u.valToPos(marker.x, "x", true);
+
+              if (x < u.bbox.left || x > u.bbox.left + u.bbox.width) {
+                continue;
+              }
+
+              ctx.beginPath();
+              ctx.moveTo(x, u.bbox.top);
+              ctx.lineTo(x, u.bbox.top + u.bbox.height);
+              ctx.stroke();
+              ctx.fillText(marker.label, x, u.bbox.top + 14);
+            }
+
+            ctx.restore();
+          }
+        ]
+      },
       scales: {
         x: { time: false }
       },
       axes: [
         {
           ...AXIS_STYLE,
-          label: "Flight time (s)",
+          label: xLabel,
           labelSize: 22
         },
         {
@@ -102,7 +137,7 @@ export function renderTimeSeriesChart(element, options) {
       ],
       series: [
         {
-          label: "t (s)",
+          label: xLabel === "Flight time (s)" ? "t (s)" : xLabel,
           value: (self, value) =>
             value == null ? "--" : value.toFixed(2)
         },

@@ -148,7 +148,8 @@ const PRESETS = {
     wideBandNoise: 1.2,
     governorStiffness: 0.15,
     loadSag: 4,
-    trackingLag: 0.035 // seconds — crisp
+    trackingLag: 0.035, // seconds — crisp
+    trackingDamping: 0.95 // near-critical: no overshoot
   },
   "vibration-problem": {
     description:
@@ -159,7 +160,8 @@ const PRESETS = {
     wideBandNoise: 4,
     governorStiffness: 0.15,
     loadSag: 6,
-    trackingLag: 0.045
+    trackingLag: 0.045,
+    trackingDamping: 0.42 // underdamped: overshoot + ringing
   },
   "governor-sag": {
     description:
@@ -170,7 +172,8 @@ const PRESETS = {
     wideBandNoise: 1.6,
     governorStiffness: 0.035,
     loadSag: 65,
-    trackingLag: 0.04
+    trackingLag: 0.04,
+    trackingDamping: 0.8
   }
 };
 
@@ -290,6 +293,7 @@ export function generateFlight(presetName, durationSeconds, seed = 20260722) {
   const dt = 1 / SAMPLE_RATE;
 
   const gyro = [0, 0, 0];
+  const gyroRate = [0, 0, 0];
   const iTerm = [0, 0, 0];
   let headspeed = 0;
   let vbat = 2520; // volts × 100
@@ -312,12 +316,20 @@ export function generateFlight(presetName, durationSeconds, seed = 20260722) {
     const mainRotorHz = headspeed / 60;
     const tailHz = mainRotorHz * TAIL_RATIO;
 
-    // ---- clean gyro follows setpoint with a lag ----
-    const alpha = dt / (preset.trackingLag + dt);
+    // ---- gyro follows setpoint as a second-order system:
+    // damping < 1 produces the overshoot and ringing a
+    // badly tuned helicopter really shows ----
+    const naturalFrequency = 1 / preset.trackingLag;
+    const damping = preset.trackingDamping;
 
     const cleanGyro = [0, 1, 2].map((axis) => {
       const target = setpointAt(axis, t, durationSeconds);
-      gyro[axis] += (target - gyro[axis]) * alpha;
+      const acceleration =
+        naturalFrequency * naturalFrequency * (target - gyro[axis]) -
+        2 * damping * naturalFrequency * gyroRate[axis];
+
+      gyroRate[axis] += acceleration * dt;
+      gyro[axis] += gyroRate[axis] * dt;
       return gyro[axis];
     });
 

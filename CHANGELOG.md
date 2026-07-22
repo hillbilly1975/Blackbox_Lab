@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.3.0 — "The Birthday Build, Part Two" (same evening)
+
+The answers layer, completed:
+
+- **Flight Verdict** — after every log the app lands on
+  plain-language answer cards (vibration, rotor speed, tuning,
+  battery) with status, cause, a "what to do" line and a
+  show-me button that jumps to the evidence — zoomed to the
+  exact frequency band or second where it happened.
+- **Governor / ESC / Battery Labs** — real analyses with stories
+  and metric tiles: droop % with a worst-droop marker on the
+  chart, throttle headroom & saturation time, voltage sag,
+  estimated internal resistance and consumed mAh.
+- **Compare Flights** — before vs after with significance-aware
+  deltas ("your change made the biggest vibration peak 86%
+  better; nothing got worse") and an overlaid spectrum.
+- **Health Record** — every analyzed flight filed per craft,
+  locally; trend warnings when vibration, droop, internal
+  resistance or tracking drift the wrong way across flights.
+- **How to Use** — a five-step in-app guide with a no-jargon
+  glossary; "Try a Sample Flight" needs one click and no file
+  dialog; beginner mode by default, advanced on demand.
+- Friendlier looks (same dark & blue soul), a sidebar credit,
+  amplitude-calibrated FFT, spool-up excluded from spectra,
+  unfiltered-gyro-first noise analysis, and a Playwright UI
+  smoke test that loads the app and asserts the verdict renders.
+
 ## v0.2.0 — "The Birthday Build" (2026-07-22)
 
 A gift from your friends at EGODRIFT. Happy birthday, Daniel. 🚁

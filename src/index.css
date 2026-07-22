@@ -472,3 +472,74 @@ body.advanced-mode details.advanced-block {
 [data-screen].screen-active {
   display: block;
 }
+
+/* ---------------- compare ---------------- */
+
+.compare-row {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 8px 0;
+  background: var(--card-soft);
+}
+
+.compare-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compare-row-title {
+  font-weight: 700;
+}
+
+.compare-row-delta {
+  margin-left: auto;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.direction-better .compare-row-delta { color: var(--good); }
+.direction-worse .compare-row-delta { color: var(--attention); }
+.direction-same .compare-row-delta { color: var(--ink-muted); }
+
+.compare-row-sentence {
+  color: var(--ink-soft);
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.compare-row-values {
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  margin-top: 4px;
+}
+
+/* ---------------- health record ---------------- */
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.history-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+.history-table th {
+  text-align: left;
+  color: var(--ink-muted);
+  font-weight: 600;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.history-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}

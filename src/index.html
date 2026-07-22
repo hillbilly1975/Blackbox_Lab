@@ -22,6 +22,8 @@
       <button class="nav-button" data-target="governor">Governor Lab</button>
       <button class="nav-button" data-target="esc">ESC Lab</button>
       <button class="nav-button" data-target="battery">Battery Lab</button>
+      <button class="nav-button" data-target="compare">Compare Flights</button>
+      <button class="nav-button" data-target="history">Health Record</button>
       <button class="nav-button" data-target="reports">Reports</button>
       <button class="nav-button" data-target="settings">Settings</button>
 
@@ -160,7 +162,19 @@
         </section>
 
         <section class="card">
-          <h3>5 · Share when you need help</h3>
+          <h3>5 · Compare — the loop closes</h3>
+          <p>
+            After the next flight, open <strong>Compare
+            Flights</strong>: before vs after, and one sentence per
+            topic tells you whether your change helped. Meanwhile the
+            <strong>Health Record</strong> quietly tracks every
+            analyzed flight per craft and warns you when vibration or
+            droop trends the wrong way across sessions.
+          </p>
+        </section>
+
+        <section class="card">
+          <h3>6 · Share when you need help</h3>
           <p>
             The <strong>Reports</strong> screen builds a single
             file with your verdict, findings and charts — ready to
@@ -401,6 +415,94 @@
           </p>
           <div class="chart-container" id="chartBattery">
             <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+        </section>
+      </section>
+
+      <!-- ============ COMPARE ============ -->
+      <section data-screen="compare">
+        <section class="hero">
+          <h2>Compare Flights</h2>
+          <p>Did your change help? Before vs after, in plain words.</p>
+        </section>
+
+        <section class="card">
+          <h3>Set Up the Comparison</h3>
+          <p>
+            <strong>Before</strong> is whatever log you have open.
+            Then load the <strong>after</strong> flight — the one you
+            flew once you changed something.
+          </p>
+          <div class="decode-info" id="compareBaselineInfo">
+            No baseline yet — open a log first (Home screen).
+          </div>
+
+          <input type="file" id="compareFileInput" accept=".csv,.bbl,.bfl,.txt,.log" hidden />
+
+          <div class="button-row">
+            <button class="primary-button" id="compareOpenButton" disabled>
+              Open "After" Log
+            </button>
+            <button class="secondary-button" id="compareSampleButton" disabled>
+              Demo: compare with the clean sample
+            </button>
+          </div>
+        </section>
+
+        <section class="card" id="compareResultCard" hidden>
+          <h3>What Changed</h3>
+          <p class="verdict-summary" id="compareSummary"></p>
+          <div id="compareRows"></div>
+        </section>
+
+        <section class="card" id="compareChartCard" hidden>
+          <h3>Noise Spectrum — Before vs After</h3>
+          <p class="chart-hint">
+            Two flights, one picture. Shrinking peaks = progress.
+          </p>
+          <div class="chart-container" id="chartCompareSpectrum"></div>
+        </section>
+      </section>
+
+      <!-- ============ HEALTH RECORD ============ -->
+      <section data-screen="history">
+        <section class="hero">
+          <h2>Health Record</h2>
+          <p>Your helicopter over time — trends no single flight can show.</p>
+        </section>
+
+        <section class="card">
+          <h3>Craft</h3>
+          <p>
+            Every flight you analyze is filed automatically under its
+            craft name (from the log). Everything stays on this
+            computer.
+          </p>
+          <div class="flight-picker">
+            <select id="historyCraftSelect"></select>
+          </div>
+          <p class="lab-story" id="historyNote" style="margin-top:14px;">No flights recorded yet.</p>
+          <div id="historyFindings"></div>
+        </section>
+
+        <section class="card" id="historyTrendCard" hidden>
+          <h3>Vibration Across Flights</h3>
+          <p class="chart-hint">A rising line means something mechanical is changing.</p>
+          <div class="chart-container" id="chartTrendVibration"></div>
+          <h3 style="margin-top:22px;">Governor Droop Across Flights</h3>
+          <p class="chart-hint">Rising droop = the power system losing headroom.</p>
+          <div class="chart-container" id="chartTrendDroop"></div>
+        </section>
+
+        <section class="card" id="historyTableCard" hidden>
+          <h3>Logged Flights</h3>
+          <div class="table-scroll">
+            <table class="history-table" id="historyTable"></table>
+          </div>
+          <div class="button-row" style="margin-top:14px;">
+            <button class="secondary-button" id="clearHistoryButton">
+              Clear all history
+            </button>
           </div>
         </section>
       </section>

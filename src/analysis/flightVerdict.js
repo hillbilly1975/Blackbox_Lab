@@ -162,8 +162,8 @@ function rotorSpeedVerdict(headspeed, governorTarget) {
       headline: `Headspeed sags up to ${Math.round(maximumDroop)} rpm under load`,
       detail: `That is ${droopPercent.toFixed(1)}% below target — the governor needs more gain or the power system more headroom.`,
       action: "In Rotorflight Configurator, raise governor gain in small steps — or check the ESC Lab for missing power headroom.",
-      screen: "viewer",
-      evidence: "Headspeed & Governor chart, Log Viewer"
+      screen: "governor",
+      evidence: "Headspeed vs Target chart, Governor Lab"
     };
   }
 
@@ -175,8 +175,8 @@ function rotorSpeedVerdict(headspeed, governorTarget) {
       headline: `Headspeed dips ${Math.round(maximumDroop)} rpm on collective`,
       detail: `${droopPercent.toFixed(1)}% droop is flyable; a touch more governor gain could tighten it.`,
       action: "Optional: a small governor gain increase next session.",
-      screen: "viewer",
-      evidence: "Headspeed & Governor chart, Log Viewer"
+      screen: "governor",
+      evidence: "Headspeed vs Target chart, Governor Lab"
     };
   }
 
@@ -187,8 +187,8 @@ function rotorSpeedVerdict(headspeed, governorTarget) {
     headline: "Rock-solid headspeed",
     detail: `Worst droop only ${Math.round(maximumDroop)} rpm (${droopPercent.toFixed(1)}%) — the governor is doing its job.`,
     action: "Nothing to do — this is what good looks like.",
-    screen: "viewer",
-    evidence: "Headspeed & Governor chart, Log Viewer"
+    screen: "governor",
+    evidence: "Headspeed vs Target chart, Governor Lab"
   };
 }
 

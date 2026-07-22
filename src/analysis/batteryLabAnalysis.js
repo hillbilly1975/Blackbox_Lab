@@ -121,5 +121,14 @@ export function analyzeBatteryLab({ timeSeconds, vbat, amperage }) {
     });
   }
 
-  return { status, story, metrics };
+  return {
+    status,
+    story,
+    metrics,
+    sagPercent: Math.round(sagPercent * 100) / 100,
+    internalResistance: internalResistancePerCell
+      ? Math.round(internalResistancePerCell * 10) / 10
+      : null,
+    endVoltsPerCell: Math.round(endPerCell * 100) / 100
+  };
 }

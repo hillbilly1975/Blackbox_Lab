@@ -20,6 +20,14 @@ import {
   estimateSampleRate
 } from "./analysis/dsp/fft.js";
 import { buildFlightVerdict } from "./analysis/flightVerdict.js";
+import { compareFlights } from "./analysis/compareFlights.js";
+import {
+  loadHistory,
+  recordFlight,
+  buildHistoryEntry,
+  assessTrends,
+  clearHistory
+} from "./analysis/craftHistory.js";
 import { analyzeGovernorLab } from "./analysis/governorLabAnalysis.js";
 import { analyzeEscLab } from "./analysis/escLabAnalysis.js";
 import { analyzeBatteryLab } from "./analysis/batteryLabAnalysis.js";
@@ -87,6 +95,26 @@ const escStory = el("escStory");
 const escMetrics = el("escMetrics");
 const batteryStory = el("batteryStory");
 const batteryMetrics = el("batteryMetrics");
+
+const compareBaselineInfo = el("compareBaselineInfo");
+const compareOpenButton = el("compareOpenButton");
+const compareSampleButton = el("compareSampleButton");
+const compareFileInput = el("compareFileInput");
+const compareResultCard = el("compareResultCard");
+const compareChartCard = el("compareChartCard");
+const compareSummary = el("compareSummary");
+const compareRows = el("compareRows");
+const chartCompareSpectrum = el("chartCompareSpectrum");
+
+const historyCraftSelect = el("historyCraftSelect");
+const historyNote = el("historyNote");
+const historyFindings = el("historyFindings");
+const historyTrendCard = el("historyTrendCard");
+const historyTableCard = el("historyTableCard");
+const chartTrendVibration = el("chartTrendVibration");
+const chartTrendDroop = el("chartTrendDroop");
+const historyTable = el("historyTable");
+const clearHistoryButton = el("clearHistoryButton");
 
 const buildReportButton = el("buildReportButton");
 const reportStatus = el("reportStatus");
@@ -274,17 +302,47 @@ function buildDataset(lines, pidAnalysis) {
   const motor = firstColumn([/^motor\[0\]/i]);
 
   // ---- spectra + labelled peaks ----
+  // Analyze the governed part of the flight only: during
+  // spool-up the rotor frequency sweeps, which smears the
+  // vibration peaks across the spectrum.
   const sampleRate = estimateSampleRate(timeMicroseconds);
-  const gyroColumnNames = findColumns(headerLine, [
-    /^gyroUnfilt/i,
-    /^gyroADC/i
-  ]).slice(0, 3);
+  // Noise lives in the UNFILTERED gyro. findColumns keeps
+  // header order, so ask for unfiltered explicitly first
+  // and fall back to the filtered trace only if a log has
+  // nothing better.
+  const unfilteredColumns = findColumns(headerLine, [/^gyroUnfilt/i]);
+  const gyroColumnNames = (
+    unfilteredColumns.length > 0
+      ? unfilteredColumns
+      : findColumns(headerLine, [/^gyroADC/i])
+  ).slice(0, 3);
+
+  let spectrumStart = Math.floor(timeSeconds.length * 0.15);
+
+  if (headspeed && headspeed.length > 200) {
+    const settled = averageOf(
+      headspeed.slice(-Math.floor(headspeed.length / 3))
+    );
+
+    if (settled && settled > 300) {
+      const reached = headspeed.findIndex(
+        (value) => value >= settled * 0.9
+      );
+
+      if (reached > 0 && reached < headspeed.length * 0.7) {
+        spectrumStart = reached;
+      }
+    }
+  }
 
   const spectra = [];
 
   if (sampleRate) {
     gyroColumnNames.forEach((name, index) => {
-      const spectrum = computeNoiseSpectrum(columnValues(name), sampleRate);
+      const spectrum = computeNoiseSpectrum(
+        columnValues(name).slice(spectrumStart),
+        sampleRate
+      );
 
       if (spectrum) {
         spectra.push({
@@ -317,7 +375,29 @@ function buildDataset(lines, pidAnalysis) {
     pidAnalysis
   });
 
+  // Evidence that zooms to the moment: attach a focus
+  // window (chart + x-range) to the cards that have one.
+  for (const card of verdict.cards) {
+    if (card.key === "vibration" && markers.length > 0) {
+      card.focus = {
+        chartId: "chartSpectrum",
+        min: Math.max(0, markers[0].hz - 30),
+        max: markers[0].hz + 30
+      };
+    }
+
+    if (card.key === "rotor" && labs.governor) {
+      card.focus = {
+        chartId: "chartGovernor",
+        min: Math.max(0, labs.governor.droopTimeSeconds - 3),
+        max: labs.governor.droopTimeSeconds + 3
+      };
+    }
+  }
+
   return {
+    pidScore: Number.isFinite(pidAnalysis?.score) ? pidAnalysis.score : null,
+    batterySagPercent: labs.battery ? labs.battery.sagPercent : null,
     headerLine,
     timeSeconds,
     columnValues,
@@ -430,9 +510,25 @@ function renderVerdict(dataset) {
     const button = document.createElement("button");
     button.className = "verdict-jump";
     button.textContent = `Show me → ${card.evidence}`;
-    button.addEventListener("click", () =>
-      navigation.showScreen(card.screen)
-    );
+    button.addEventListener("click", () => {
+      navigation.showScreen(card.screen);
+
+      if (card.focus) {
+        // Let the screen become visible, then zoom the
+        // evidence chart to the exact moment.
+        setTimeout(() => {
+          const chart =
+            el(card.focus.chartId)?.__blackboxLabChart;
+
+          if (chart) {
+            chart.setScale("x", {
+              min: card.focus.min,
+              max: card.focus.max
+            });
+          }
+        }, 120);
+      }
+    });
 
     cardElement.appendChild(button);
     verdictCards.appendChild(cardElement);
@@ -522,12 +618,36 @@ function renderAllCharts(dataset) {
     { yLabel: "" }
   );
 
-  renderSeriesChart(
-    chartGovernor,
-    dataset,
-    [/headspeed/i, /governorTarget/i, /govTarget/i],
-    { yLabel: "rpm" }
-  );
+  {
+    const governorColumns = dataset.findColumnsIn([
+      /headspeed/i,
+      /governorTarget/i,
+      /govTarget/i
+    ]).slice(0, 6);
+
+    if (governorColumns.length === 0) {
+      chartGovernor.innerHTML =
+        '<p class="chart-empty">This log has no data for this chart.</p>';
+    } else {
+      renderTimeSeriesChart(chartGovernor, {
+        timeSeconds: decimate(dataset.timeSeconds),
+        series: governorColumns.map((name, index) => ({
+          label: name,
+          values: decimate(dataset.columnValues(name)),
+          color: CHART_COLORS[index % CHART_COLORS.length]
+        })),
+        yLabel: "rpm",
+        markers: dataset.labs.governor
+          ? [
+              {
+                x: dataset.labs.governor.droopTimeSeconds,
+                label: "worst droop"
+              }
+            ]
+          : []
+      });
+    }
+  }
 
   renderSeriesChart(chartEsc, dataset, [/^motor\[/i], { yLabel: "throttle" });
 
@@ -628,6 +748,31 @@ function analyzeFlight(flightIndex) {
     ? "Ready — the report includes whatever the Labs found."
     : "Open a log first.";
 
+  // ---- file this flight in the craft's health record ----
+  if (currentDataset) {
+    const craftName = getMetadataValue(currentFlightLines, "Craft name");
+
+    const entry = buildHistoryEntry({
+      fileName: file.name,
+      flightDateMs: file.lastModified || 0,
+      durationSeconds:
+        currentDataset.timeSeconds[currentDataset.timeSeconds.length - 1],
+      dataset: currentDataset
+    });
+
+    const craftKey = recordFlight(
+      localStorage,
+      craftName === "Not found" ? "Unknown craft" : craftName,
+      entry
+    );
+
+    refreshHistoryScreen(craftKey);
+  }
+
+  refreshCompareButtons();
+  compareResultCard.hidden = true;
+  compareChartCard.hidden = true;
+
   // Land the pilot on the answers, not the data.
   navigation.showScreen("home");
   document.querySelector(".workspace").scrollTop = 0;
@@ -674,3 +819,277 @@ buildReportButton.addEventListener("click", () => {
   reportStatus.textContent =
     "Report saved — check your downloads folder.";
 });
+
+
+// ======================================================
+// 08. COMPARE FLIGHTS (before vs after)
+// ======================================================
+
+function strongestSpectrumOf(dataset) {
+  if (!dataset || dataset.spectra.length === 0) {
+    return null;
+  }
+
+  let strongest = dataset.spectra[0];
+
+  for (const entry of dataset.spectra) {
+    if (
+      Math.max(...entry.spectrum.magnitudes) >
+      Math.max(...strongest.spectrum.magnitudes)
+    ) {
+      strongest = entry;
+    }
+  }
+
+  return strongest.spectrum;
+}
+
+async function datasetFromLogFile(file) {
+  const logData = await readLogFile(file);
+
+  if (!logData || logData.flights.length === 0) {
+    return null;
+  }
+
+  const lines = logData.flights[0].lines;
+
+  const { pidAnalysis } = buildLogAnalysis({
+    fileType: logData.fileType,
+    lines,
+    aircraftProfiles
+  });
+
+  return { dataset: buildDataset(lines, pidAnalysis), name: file.name };
+}
+
+function refreshCompareButtons() {
+  const ready = Boolean(currentDataset);
+  compareOpenButton.disabled = !ready;
+  compareSampleButton.disabled = !ready || !window.blackboxLab;
+
+  compareBaselineInfo.textContent = ready
+    ? `Before: ${summaryFileName.textContent}`
+    : 'No baseline yet — open a log first (Home screen).';
+}
+
+function renderComparison(comparisonDataset, comparisonName) {
+  if (!currentDataset || !comparisonDataset) {
+    return;
+  }
+
+  const result = compareFlights(currentDataset, comparisonDataset);
+
+  compareResultCard.hidden = false;
+  compareSummary.textContent = result.summary;
+  compareRows.innerHTML = "";
+
+  for (const row of result.rows) {
+    const rowElement = document.createElement("div");
+    rowElement.className = `compare-row direction-${row.direction}`;
+    rowElement.innerHTML = `
+      <div class="compare-row-top">
+        <span class="compare-row-title">${row.title}</span>
+        <span class="compare-row-delta">${
+          row.direction === "better"
+            ? "improved"
+            : row.direction === "worse"
+              ? "got worse"
+              : "unchanged"
+        }</span>
+      </div>
+      <div class="compare-row-sentence">${row.sentence}</div>
+      <div class="compare-row-values">before: ${row.before} · after: ${row.after}</div>
+    `;
+    compareRows.appendChild(rowElement);
+  }
+
+  const beforeSpectrum = strongestSpectrumOf(currentDataset);
+  const afterSpectrum = strongestSpectrumOf(comparisonDataset);
+
+  if (beforeSpectrum && afterSpectrum) {
+    compareChartCard.hidden = false;
+    renderSpectrumChart(chartCompareSpectrum, [
+      {
+        label: `Before (${summaryFileName.textContent})`,
+        spectrum: beforeSpectrum,
+        color: CHART_COLORS[1]
+      },
+      {
+        label: `After (${comparisonName})`,
+        spectrum: afterSpectrum,
+        color: CHART_COLORS[0]
+      }
+    ]);
+  }
+}
+
+compareOpenButton.addEventListener("click", () => {
+  compareFileInput.click();
+});
+
+compareFileInput.addEventListener("change", async () => {
+  const file = compareFileInput.files[0];
+
+  if (!file) {
+    return;
+  }
+
+  try {
+    const result = await datasetFromLogFile(file);
+
+    if (result && result.dataset) {
+      renderComparison(result.dataset, result.name);
+    } else {
+      compareBaselineInfo.textContent =
+        "Could not read flight data from the comparison log.";
+    }
+  } catch (error) {
+    compareBaselineInfo.textContent =
+      "Something went wrong: " + error.message;
+  }
+
+  compareFileInput.value = "";
+});
+
+compareSampleButton.addEventListener("click", async () => {
+  const bytes = await window.blackboxLab.readSampleLog(
+    "sample-clean-tuned.bbl"
+  );
+
+  if (!bytes) {
+    return;
+  }
+
+  const file = new File(
+    [new Uint8Array(bytes)],
+    "sample-clean-tuned.bbl"
+  );
+
+  const result = await datasetFromLogFile(file);
+
+  if (result && result.dataset) {
+    renderComparison(result.dataset, result.name);
+  }
+});
+
+// ======================================================
+// 09. HEALTH RECORD (per-craft history)
+// ======================================================
+
+function refreshHistoryScreen(selectedCraft) {
+  const history = loadHistory(localStorage);
+  const craftNames = Object.keys(history).sort();
+
+  historyCraftSelect.innerHTML = "";
+
+  if (craftNames.length === 0) {
+    historyNote.textContent =
+      "No flights recorded yet — every log you open is filed here automatically.";
+    historyFindings.innerHTML = "";
+    historyTrendCard.hidden = true;
+    historyTableCard.hidden = true;
+    return;
+  }
+
+  for (const name of craftNames) {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = `${name} (${history[name].length} flights)`;
+    historyCraftSelect.appendChild(option);
+  }
+
+  const craft =
+    selectedCraft && history[selectedCraft]
+      ? selectedCraft
+      : craftNames[0];
+  historyCraftSelect.value = craft;
+
+  const entries = history[craft];
+  const trends = assessTrends(entries);
+
+  historyNote.textContent = trends.note;
+  historyFindings.innerHTML = "";
+
+  for (const finding of trends.findings) {
+    const findingElement = document.createElement("div");
+    findingElement.className = "verdict-item status-attention";
+    findingElement.innerHTML = `
+      <div class="verdict-item-top">
+        <span class="status-dot"></span>
+        <span class="verdict-item-title">Trend</span>
+        <span class="verdict-item-status">Needs attention</span>
+      </div>
+      <div class="verdict-item-detail">${finding.sentence}</div>
+    `;
+    historyFindings.appendChild(findingElement);
+  }
+
+  // ---- trend charts (x = flight number) ----
+  const flightNumbers = entries.map((entry, index) => index + 1);
+
+  const trendChart = (element, key, yLabel) => {
+    const values = entries.map((entry) =>
+      Number.isFinite(entry[key]) ? entry[key] : null
+    );
+
+    if (values.filter((value) => value !== null).length < 2) {
+      element.innerHTML =
+        '<p class="chart-empty">Not enough flights yet for a trend.</p>';
+      return;
+    }
+
+    renderTimeSeriesChart(element, {
+      timeSeconds: flightNumbers,
+      series: [{ label: yLabel, values }],
+      yLabel,
+      xLabel: "Flight #",
+      height: 200
+    });
+  };
+
+  historyTrendCard.hidden = false;
+  trendChart(chartTrendVibration, "vibrationPeak", "vibration peak");
+  trendChart(chartTrendDroop, "droopRpm", "worst droop (rpm)");
+
+  // ---- flights table ----
+  historyTableCard.hidden = false;
+
+  const cell = (value, suffix = "") =>
+    value === null || value === undefined ? "—" : `${value}${suffix}`;
+
+  historyTable.innerHTML = `
+    <tr>
+      <th>Date</th><th>Log</th><th>Length</th><th>Vibration</th>
+      <th>Droop</th><th>Tracking</th><th>Sag</th><th>IR est.</th>
+    </tr>
+    ${entries
+      .map(
+        (entry) => `
+      <tr>
+        <td>${new Date(entry.flightDateMs).toLocaleDateString()}</td>
+        <td>${entry.fileName}</td>
+        <td>${cell(entry.durationSeconds, " s")}</td>
+        <td>${cell(entry.vibrationPeak)}${entry.vibrationHz ? ` @ ${entry.vibrationHz} Hz` : ""}</td>
+        <td>${cell(entry.droopRpm, " rpm")}</td>
+        <td>${cell(entry.trackingScore, "/100")}</td>
+        <td>${cell(entry.batterySagPercent, "%")}</td>
+        <td>${cell(entry.internalResistance, " mΩ")}</td>
+      </tr>`
+      )
+      .join("")}
+  `;
+}
+
+historyCraftSelect.addEventListener("change", () => {
+  refreshHistoryScreen(historyCraftSelect.value);
+});
+
+clearHistoryButton.addEventListener("click", () => {
+  if (confirm("Delete the entire health record on this computer?")) {
+    clearHistory(localStorage);
+    refreshHistoryScreen();
+  }
+});
+
+refreshHistoryScreen();
+refreshCompareButtons();

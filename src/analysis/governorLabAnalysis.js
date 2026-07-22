@@ -74,6 +74,10 @@ export function analyzeGovernorLab({ timeSeconds, headspeed, governorTarget }) {
     score,
     status,
     story,
+    droopRpm: Math.round(maximumDroop * 10) / 10,
+    droopPercent: Math.round(droopPercent * 100) / 100,
+    droopTimeSeconds: Math.round(droopTime * 100) / 100,
+    averageHeadspeed: Math.round(averageActual),
     metrics: [
       { label: "Average headspeed", value: `${Math.round(averageActual)} rpm` },
       { label: "Target", value: `${Math.round(averageTarget)} rpm` },
