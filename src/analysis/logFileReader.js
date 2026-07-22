@@ -65,7 +65,9 @@ export async function readLogFile(file) {
     return {
       file,
       sizeKb,
-      fileType: "Blackbox BBL Log (binary, decoded natively)",
+      // Exactly this label: it selects the full-analysis
+      // branch in logAnalysisBuilder.js.
+      fileType: "Blackbox BBL Log",
       isBinary: true,
       flights: usable
     };

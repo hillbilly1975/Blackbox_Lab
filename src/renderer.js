@@ -295,7 +295,7 @@ function analyzeFlight(flightIndex) {
   const lines = flight.lines;
 
   decodeInfo.textContent = flight.decodeInfo
-    ? `${fileType} — ${flight.decodeInfo}`
+    ? `Binary .bbl decoded natively — ${flight.decodeInfo}`
     : fileType;
 
   const {
