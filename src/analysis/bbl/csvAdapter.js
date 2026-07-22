@@ -17,7 +17,15 @@ export function decodedFlightToCsvLines(flight) {
   const lines = [];
 
   // ---- metadata block (blackbox_decode style) ----
+  // "Field X ..." definition lines are skipped: their values
+  // contain the whole comma-separated field list, which the
+  // telemetry-header detector would mistake for the actual
+  // column header row (off-by-one column bug).
   for (const [key, value] of flight.headers.entries()) {
+    if (key.startsWith("Field ")) {
+      continue;
+    }
+
     lines.push(`"${key}","${value}"`);
   }
 

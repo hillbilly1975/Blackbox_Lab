@@ -50,13 +50,19 @@ export function analyzeEscLab({ motor, amperage, vbat }) {
   const saturationPercent = (saturatedSamples / motor.length) * 100;
 
   // Current is usually logged as amps × 100.
-  const ampsScale = amperage && statsOf(amperage).max > 500 ? 100 : 1;
-  const ampsStats = amperage
+  const rawAmpsStats = statsOf(amperage);
+  const ampsScale = rawAmpsStats && rawAmpsStats.max > 500 ? 100 : 1;
+  const ampsStats = rawAmpsStats
     ? statsOf(amperage.map((value) => value / ampsScale))
     : null;
 
-  const voltsScale = vbat && statsOf(vbat).average > 1000 ? 100 : vbat && statsOf(vbat).average > 100 ? 10 : 1;
-  const voltsStats = vbat
+  const rawVoltsStats = statsOf(vbat);
+  const voltsScale = rawVoltsStats && rawVoltsStats.average > 1000
+    ? 100
+    : rawVoltsStats && rawVoltsStats.average > 100
+      ? 10
+      : 1;
+  const voltsStats = rawVoltsStats
     ? statsOf(vbat.map((value) => value / voltsScale))
     : null;
 

@@ -149,10 +149,18 @@ async function loadFromFile(file) {
   analyzeFlight(0);
 }
 
-logFileInput.addEventListener("change", () => {
+logFileInput.addEventListener("change", async () => {
   if (logFileInput.files[0]) {
-    loadFromFile(logFileInput.files[0]);
+    try {
+      await loadFromFile(logFileInput.files[0]);
+    } catch (error) {
+      fileStatus.textContent =
+        "Something went wrong reading this log: " + error.message;
+    }
   }
+
+  // Allow re-opening the same file after a fix.
+  logFileInput.value = "";
 });
 
 trySampleButton.addEventListener("click", async () => {
@@ -238,7 +246,13 @@ function buildDataset(lines, pidAnalysis) {
   const columnValues = (name) => getColumnValues(lines, headerIndex, name);
   const firstColumn = (patterns) => {
     const matches = findColumns(headerLine, patterns);
-    return matches.length ? columnValues(matches[0]) : null;
+
+    if (!matches.length) {
+      return null;
+    }
+
+    const values = columnValues(matches[0]);
+    return values.length > 0 ? values : null;
   };
 
   const timeColumnName = findColumns(headerLine, [/^time/i])[0];

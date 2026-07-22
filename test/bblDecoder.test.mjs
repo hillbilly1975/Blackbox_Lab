@@ -369,3 +369,20 @@ test("csv adapter renders metadata, header row, and data rows", () => {
     TEST_FRAMES.length
   );
 });
+
+test("csv adapter output's telemetry header is the real column row", async () => {
+  const { findTelemetryHeaderIndex } = await import(
+    "../src/analysis/telemetryHeader.js"
+  );
+
+  const log = buildTestLog({ frames: TEST_FRAMES });
+  const { flights } = decodeBblFile(log);
+  const lines = decodedFlightToCsvLines(flights[0]);
+
+  const headerIndex = findTelemetryHeaderIndex(lines);
+  assert.ok(headerIndex >= 0, "no telemetry header found");
+  assert.ok(
+    lines[headerIndex].startsWith("loopIteration,time,"),
+    `detector matched the wrong line: ${lines[headerIndex].slice(0, 60)}`
+  );
+});

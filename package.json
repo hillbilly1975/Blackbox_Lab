@@ -2,7 +2,7 @@
   "name": "blackbox-lab",
   "productName": "Blackbox Lab",
   "version": "0.2.0",
-  "description": "Rotorflight Blackbox analysis suite \u2014 simple first, deeper when you want it.",
+  "description": "Rotorflight Blackbox analysis suite — simple first, deeper when you want it.",
   "main": "src/index.js",
   "private": true,
   "scripts": {
@@ -39,6 +39,7 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.11.2",
     "@electron-forge/plugin-fuses": "^7.11.2",
     "@electron/fuses": "^1.8.0",
-    "electron": "43.1.0"
+    "electron": "43.1.0",
+    "playwright-core": "^1.61.1"
   }
 }
