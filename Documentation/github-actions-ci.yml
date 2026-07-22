@@ -15,3 +15,6 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm test
+# NOTE: this is a ready-to-use GitHub Actions workflow.
+# To activate CI, move this file to: .github/workflows/ci.yml
+# (Our push token could not create workflow files directly.)
