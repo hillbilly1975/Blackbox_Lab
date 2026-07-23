@@ -12,5 +12,6 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("blackboxLab", {
   readSampleLog: (name) => ipcRenderer.invoke("read-sample-log", name),
+  openExternal: (url) => ipcRenderer.invoke("open-external", url),
   listSampleLogs: () => ipcRenderer.invoke("list-sample-logs")
 });
