@@ -18,11 +18,21 @@ module.exports = {
     },
     {
       name: '@electron-forge/maker-deb',
-      config: {},
+      config: {
+        options: {
+          // The packaged binary is named after productName; without
+          // this the installer looks for "blackbox-lab" and fails.
+          bin: 'Blackbox Lab',
+        },
+      },
     },
     {
       name: '@electron-forge/maker-rpm',
-      config: {},
+      config: {
+        options: {
+          bin: 'Blackbox Lab',
+        },
+      },
     },
   ],
   plugins: [
