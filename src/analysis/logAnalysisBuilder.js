@@ -513,19 +513,40 @@ pidAnalysis = analyzePids(
   // ====================================================
 
   } else if (fileType === "CSV Telemetry Export") {
-    const headers = lines[0]
-      .split(",")
-      .map((header) => header.trim());
+  const csvHeaderIndex = lines.findIndex((line) => {
+  const lower = String(line).toLowerCase();
 
-    const headspeedColumn = findHeader(
-      headers,
-      ["rpm", "headspeed"]
-    );
+  return (
+    lower.includes("headspeed") &&
+    lower.includes("setpoint") &&
+    (lower.includes("motor[0]") || lower.includes("escthr"))
+  );
+});
+
+const csvHeaderLine =
+  csvHeaderIndex >= 0
+    ? lines[csvHeaderIndex]
+    : lines[0] || "";
+
+const delimiter =
+  (csvHeaderLine.match(/;/g) || []).length >
+  (csvHeaderLine.match(/,/g) || []).length
+    ? ";"
+    : ",";
+
+const headers = csvHeaderLine
+  .split(delimiter)
+  .map((header) => header.trim());
+
+   const headspeedColumn = findHeader(
+  headers,
+  ["headspeed"]
+);
 
     const voltageColumn = findHeader(
-      headers,
-      ["voltage", "volt", "cell"]
-    );
+  headers,
+  ["vbat", "escv", "voltage", "pack voltage", "battery voltage"]
+);
 
     const escColumn = findHeader(
       headers,
