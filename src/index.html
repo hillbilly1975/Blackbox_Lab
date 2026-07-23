@@ -576,9 +576,98 @@
             </span>
           </label>
         </section>
+
+        <section class="card" id="contributeCard" hidden>
+          <h3>Share anonymized logs</h3>
+          <p>
+            Sharing an anonymized copy of the logs you open helps
+            improve the suggestions this tool gives everyone. Never
+            included: your name, dates, locations, or anything that
+            identifies you — and you choose what is shared:
+          </p>
+          <label class="toggle-row">
+            <input type="checkbox" id="contributeToggle" />
+            <span><strong>Share anonymized flight data</strong> —
+              gyro, control and motor channels that power the
+              analysis.</span>
+          </label>
+          <div class="contribute-cats">
+            <label class="toggle-row">
+              <input type="checkbox" id="contributePower" />
+              <span>Battery &amp; ESC data — voltage, current,
+                ESC telemetry.</span>
+            </label>
+            <label class="toggle-row">
+              <input type="checkbox" id="contributeGps" />
+              <span>GPS as relative track &amp; speed — the flight's
+                shape and speeds, <strong>never your
+                location</strong> (coordinates are reduced to
+                offsets from the first fix).</span>
+            </label>
+            <label class="toggle-row">
+              <input type="checkbox" id="contributeSetup" />
+              <span>Model &amp; tuning info — craft model and setup
+                values, so logs can be grouped by setup type.</span>
+            </label>
+          </div>
+          <p class="contribute-status" id="contributeStatus"></p>
+        </section>
+
+        <section class="card">
+          <h3>About this project</h3>
+          <p>
+            Blackbox Lab is a free, open-source community project —
+            built by hobbyists, for hobbyists, and provided free of
+            charge under the MIT license.
+          </p>
+          <p>
+            <strong>Use at your own risk.</strong> The tool and its
+            analyses are provided as-is, with no warranty of any
+            kind. Suggestions are informational — you remain the
+            pilot in command, and any change you make to your
+            helicopter is your own decision and responsibility. The
+            authors accept no liability for damage to equipment,
+            property, or persons.
+          </p>
+        </section>
       </section>
 
     </main>
+  </div>
+
+  <div class="overlay" id="contributeAsk" hidden>
+    <div class="overlay-dialog">
+      <h3>Help improve Blackbox Lab?</h3>
+      <p>
+        Share an anonymized copy of the logs you open. This directly
+        improves the suggestions the tool gives everyone — more real
+        flights means smarter advice.
+      </p>
+      <p class="overlay-privacy">
+        Never included: your name, dates, or your location.
+        You pick what is shared:
+      </p>
+      <label class="toggle-row">
+        <input type="checkbox" id="askPower" checked />
+        <span>Battery &amp; ESC data</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="askGps" />
+        <span>GPS as relative track &amp; speed —
+          <strong>never your location</strong></span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="askSetup" checked />
+        <span>Model &amp; tuning info</span>
+      </label>
+      <div class="overlay-actions">
+        <button class="overlay-primary" id="askYes">Yes, share anonymized logs</button>
+        <button class="overlay-secondary" id="askNo">No thanks</button>
+      </div>
+      <p class="overlay-footnote">
+        You can change this anytime in Settings.
+      </p>
+    </div>
   </div>
 
   <script type="module" src="./renderer.js"></script>

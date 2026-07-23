@@ -11,6 +11,15 @@ import {
 } from "./ui/charts.js";
 import { buildReportHtml, downloadReport } from "./ui/reportBuilder.js";
 import { readLogFile } from "./analysis/logFileReader.js";
+import {
+  buildContribution,
+  describeContribution
+} from "./contribute/contributionBuilder.js";
+import { uploadContribution } from "./contribute/uploader.js";
+import {
+  CONTRIBUTE_ENDPOINT,
+  CONTRIBUTE_APP_VERSION
+} from "./contribute/config.js";
 import { buildLogAnalysis } from "./analysis/logAnalysisBuilder.js";
 import { findTelemetryHeaderIndex } from "./analysis/telemetryHeader.js";
 import { getColumnValues } from "./analysis/mathHelpers.js";
@@ -1089,6 +1098,11 @@ function analyzeFlight(flightIndex) {
   compareResultCard.hidden = true;
   compareChartCard.hidden = true;
 
+  // ---- community data sharing (opt-in, anonymized) ----
+  if (flight.mainFrames) {
+    maybeContributeFlight(flight, fileType, `${file.name}#${flightIndex}`);
+  }
+
   // Land the pilot on the answers, not the data.
   navigation.showScreen("home");
   document.querySelector(".workspace").scrollTop = 0;
@@ -1410,3 +1424,143 @@ clearHistoryButton.addEventListener("click", () => {
 
 refreshHistoryScreen();
 refreshCompareButtons();
+
+// ======================================================
+// Community data sharing — opt-in, anonymized.
+// Dormant unless CONTRIBUTE_ENDPOINT is configured.
+// ======================================================
+
+const CONTRIBUTE_PREF_KEY = "blackboxLabContribute";
+const CONTRIBUTE_CATS_KEY = "blackboxLabContributeCats";
+const contributedThisSession = new Set();
+
+const contributeCard = document.getElementById("contributeCard");
+const contributeToggle = document.getElementById("contributeToggle");
+const contributePower = document.getElementById("contributePower");
+const contributeGps = document.getElementById("contributeGps");
+const contributeSetup = document.getElementById("contributeSetup");
+const contributeStatus = document.getElementById("contributeStatus");
+const contributeAsk = document.getElementById("contributeAsk");
+
+function contributionEnabled() {
+  return (
+    Boolean(CONTRIBUTE_ENDPOINT) &&
+    localStorage.getItem(CONTRIBUTE_PREF_KEY) === "on"
+  );
+}
+
+function loadContributeCats() {
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(CONTRIBUTE_CATS_KEY) ?? ""
+    );
+    return {
+      power: stored.power === true,
+      gps: stored.gps === true,
+      setup: stored.setup === true
+    };
+  } catch {
+    return { power: true, gps: false, setup: true };
+  }
+}
+
+function saveContributeCats(cats) {
+  localStorage.setItem(CONTRIBUTE_CATS_KEY, JSON.stringify(cats));
+}
+
+function refreshContributeCard() {
+  if (!contributeCard) return;
+  contributeCard.hidden = !CONTRIBUTE_ENDPOINT;
+  if (!CONTRIBUTE_ENDPOINT) return;
+
+  const cats = loadContributeCats();
+  contributeToggle.checked =
+    localStorage.getItem(CONTRIBUTE_PREF_KEY) === "on";
+  contributePower.checked = cats.power;
+  contributeGps.checked = cats.gps;
+  contributeSetup.checked = cats.setup;
+
+  const disabled = !contributeToggle.checked;
+  [contributePower, contributeGps, contributeSetup].forEach((el) => {
+    el.disabled = disabled;
+  });
+}
+
+function maybeContributeFlight(flight, fileType, key) {
+  if (!contributionEnabled()) return;
+  if (contributedThisSession.has(key)) return;
+  contributedThisSession.add(key);
+
+  const payload = buildContribution(
+    flight,
+    fileType,
+    loadContributeCats(),
+    CONTRIBUTE_APP_VERSION
+  );
+
+  if (contributeStatus) {
+    contributeStatus.textContent = `Sharing: ${describeContribution(payload)} …`;
+  }
+
+  uploadContribution(CONTRIBUTE_ENDPOINT, payload)
+    .then((result) => {
+      if (contributeStatus) {
+        contributeStatus.textContent = result.ok
+          ? "Last log shared anonymously — thank you for helping the tool learn. ✓"
+          : `Sharing failed (server said ${result.status}) — the tool keeps working normally.`;
+      }
+    })
+    .catch(() => {
+      if (contributeStatus) {
+        contributeStatus.textContent =
+          "Sharing failed (no connection) — the tool keeps working normally.";
+      }
+    });
+}
+
+if (contributeToggle) {
+  contributeToggle.addEventListener("change", () => {
+    localStorage.setItem(
+      CONTRIBUTE_PREF_KEY,
+      contributeToggle.checked ? "on" : "off"
+    );
+    refreshContributeCard();
+  });
+
+  [contributePower, contributeGps, contributeSetup].forEach((el) => {
+    el.addEventListener("change", () => {
+      saveContributeCats({
+        power: contributePower.checked,
+        gps: contributeGps.checked,
+        setup: contributeSetup.checked
+      });
+    });
+  });
+}
+
+if (contributeAsk && CONTRIBUTE_ENDPOINT) {
+  const answered = localStorage.getItem(CONTRIBUTE_PREF_KEY) !== null;
+
+  if (!answered) {
+    contributeAsk.hidden = false;
+
+    document.getElementById("askYes").addEventListener("click", () => {
+      localStorage.setItem(CONTRIBUTE_PREF_KEY, "on");
+      saveContributeCats({
+        power: document.getElementById("askPower").checked,
+        gps: document.getElementById("askGps").checked,
+        setup: document.getElementById("askSetup").checked
+      });
+      contributeAsk.hidden = true;
+      refreshContributeCard();
+    });
+
+    document.getElementById("askNo").addEventListener("click", () => {
+      localStorage.setItem(CONTRIBUTE_PREF_KEY, "off");
+      contributeAsk.hidden = true;
+      refreshContributeCard();
+    });
+  }
+}
+
+refreshContributeCard();

@@ -609,3 +609,88 @@ body.advanced-mode details.advanced-block {
 .advisor-recommendation.priority-first span {
   color: var(--attention);
 }
+
+/* ---------------- contribute (anonymized log sharing) ---------------- */
+
+.contribute-cats {
+  margin: 6px 0 4px 30px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line-soft);
+}
+
+.contribute-status {
+  color: var(--ink-muted);
+  font-size: 13px;
+  margin: 10px 0 0 0;
+  min-height: 18px;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 6, 12, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.overlay[hidden] {
+  display: none;
+}
+
+.overlay-dialog {
+  width: min(520px, 92vw);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 26px 28px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+
+.overlay-dialog h3 {
+  margin: 0 0 10px 0;
+  font-size: 20px;
+}
+
+.overlay-dialog p {
+  color: var(--ink-soft);
+  margin: 0 0 12px 0;
+}
+
+.overlay-privacy {
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.overlay-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.overlay-primary {
+  background: var(--accent-strong);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 18px;
+}
+
+.overlay-primary:hover {
+  background: var(--accent);
+}
+
+.overlay-secondary {
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 18px;
+}
+
+.overlay-footnote {
+  color: var(--ink-muted);
+  font-size: 12px;
+  margin: 12px 0 0 0;
+}
