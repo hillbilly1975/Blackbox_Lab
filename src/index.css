@@ -609,3 +609,46 @@ body.advanced-mode details.advanced-block {
 .advisor-recommendation.priority-first span {
   color: var(--attention);
 }
+
+/* ---------------- chart footer (stats + zoom hint) ---------------- */
+
+.chart-footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  min-height: 18px;
+}
+
+.chart-stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.chart-stat i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: 0;
+}
+
+.chart-stat b {
+  color: var(--ink-soft);
+  font-weight: 650;
+}
+
+.chart-hint {
+  margin-left: auto;
+  color: var(--ink-muted);
+  font-size: 11.5px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  opacity: 0.8;
+}
