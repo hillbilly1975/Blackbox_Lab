@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -29,6 +29,15 @@ const createWindow = () => {
 // Some APIs can only be used after this event occurs.
 // ---- sample flights bridge (read-only, whitelisted) ----
 const samplesDirectory = path.join(__dirname, '..', 'samples');
+
+// Open release pages in the pilot's real browser — only the
+// project's own GitHub URLs are allowed through.
+ipcMain.handle('open-external', (event, url) => {
+  if (typeof url === 'string' &&
+      url.startsWith('https://github.com/hillbilly1975/Blackbox_Lab')) {
+    shell.openExternal(url);
+  }
+});
 
 ipcMain.handle('list-sample-logs', () => {
   try {
