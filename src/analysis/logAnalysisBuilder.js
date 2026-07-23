@@ -538,15 +538,15 @@ const headers = csvHeaderLine
   .split(delimiter)
   .map((header) => header.trim());
 
-   const headspeedColumn = findHeader(
-  headers,
-  ["headspeed"]
-);
+    const headspeedColumn = findHeader(
+      headers,
+      ["headspeed", "rpm"]
+    );
 
     const voltageColumn = findHeader(
-  headers,
-  ["vbat", "escv", "voltage", "pack voltage", "battery voltage"]
-);
+      headers,
+      ["vbat", "escv", "voltage", "pack voltage", "battery voltage"]
+    );
 
     const escColumn = findHeader(
       headers,

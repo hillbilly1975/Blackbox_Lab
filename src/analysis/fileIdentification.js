@@ -4,7 +4,15 @@ export function identifyFile(lines, fileName = "") {
   const joinedStart = lines.slice(0, 30).join("\n").toLowerCase();
   const nameLower = String(fileName).toLowerCase();
 
-  // Check the final file extension first.
+  // Content wins over file name: a blackbox_decode export is named
+  // *.csv but carries the full Blackbox log inside, and deserves the
+  // full analysis. Only when the content does not identify itself do
+  // we fall back to the extension checks below.
+  if (joinedStart.includes("blackbox flight data recorder")) {
+    return "Blackbox BBL Log";
+  }
+
+  // Check the final file extension next.
   // Explorer exports can be named *.bbl.csv but are still CSV files.
   if (nameLower.endsWith(".csv")) {
     return "CSV Telemetry Export";
@@ -26,10 +34,6 @@ export function identifyFile(lines, fileName = "") {
     firstLine.includes(",")
   ) {
     return "CSV Telemetry Export";
-  }
-
-  if (joinedStart.includes("blackbox flight data recorder")) {
-    return "Blackbox BBL Log";
   }
 
   return "Unknown File Type";
