@@ -38,7 +38,57 @@
 
       <!-- ============ HOME ============ -->
       <section data-screen="home">
-        <section class="hero">
+        <div class="update-banner" id="updateBanner" hidden>
+          <span id="updateBannerText"></span>
+          <button class="update-banner-button" id="updateBannerButton">
+            See what's new
+          </button>
+          <button class="update-banner-dismiss" id="updateBannerDismiss"
+            title="Not now">✕</button>
+        </div>
+
+        <!-- Welcome hero: the empty state before any log is loaded.
+             Hidden (body.log-loaded) the moment a flight is in. -->
+        <section class="welcome" id="welcomeHero">
+          <div class="welcome-glow" aria-hidden="true"></div>
+          <div class="welcome-copter" aria-hidden="true">🚁</div>
+          <h2 class="welcome-title">Your flight, <span>explained.</span></h2>
+          <p class="welcome-sub">
+            Drop in a log straight off your flight controller and get a
+            plain-language verdict — what's healthy, what to watch,
+            what to fix first. No jargon walls, no chart archaeology.
+          </p>
+          <div class="welcome-actions">
+            <button class="welcome-primary" id="welcomeOpenButton">
+              Open your Blackbox log
+            </button>
+            <button class="welcome-secondary" id="welcomeSampleButton">
+              Just looking? Try a sample flight
+            </button>
+          </div>
+          <p class="welcome-drop-hint">…or drag a <strong>.bbl</strong>
+            file anywhere onto this window</p>
+          <p class="welcome-status" id="welcomeStatus"></p>
+          <div class="welcome-steps">
+            <div class="welcome-step">
+              <span class="welcome-step-num">1</span>
+              <strong>Open your log</strong>
+              <span>.bbl works directly — no conversion</span>
+            </div>
+            <div class="welcome-step">
+              <span class="welcome-step-num">2</span>
+              <strong>Read your verdict</strong>
+              <span>plain words, evidence one click away</span>
+            </div>
+            <div class="welcome-step">
+              <span class="welcome-step-num">3</span>
+              <strong>Fix what matters</strong>
+              <span>one change per flight — then compare</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="hero loaded-only">
           <h2>Welcome to Blackbox Lab</h2>
           <p>Simple first. Deeper when you want it.</p>
         </section>
@@ -56,7 +106,7 @@
           <div id="qualityWarnings"></div>
         </section>
 
-        <section class="card">
+        <section class="card loaded-only">
           <h3>Start Here</h3>
           <p>
             Open a flight log from your helicopter — raw
@@ -88,7 +138,7 @@
           <div class="decode-info" id="decodeInfo"></div>
         </section>
 
-        <section class="card">
+        <section class="card loaded-only">
           <h3>Flight Summary</h3>
           <div class="summary-grid">
             <div>
@@ -108,7 +158,7 @@
           </div>
         </section>
 
-        <details class="card advanced-block">
+        <details class="card advanced-block loaded-only">
           <summary>Advanced: telemetry columns &amp; raw data</summary>
           <h4>Telemetry Columns</h4>
           <pre id="telemetryColumns">No telemetry loaded.</pre>

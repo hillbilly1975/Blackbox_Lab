@@ -11,6 +11,7 @@ import {
 } from "./ui/charts.js";
 import { buildReportHtml, downloadReport } from "./ui/reportBuilder.js";
 import { readLogFile } from "./analysis/logFileReader.js";
+import { APP_VERSION, checkForUpdate } from "./version.js";
 import { buildLogAnalysis } from "./analysis/logAnalysisBuilder.js";
 import { findTelemetryHeaderIndex } from "./analysis/telemetryHeader.js";
 import { getColumnValues } from "./analysis/mathHelpers.js";
@@ -195,6 +196,9 @@ async function loadFromFile(file) {
   await new Promise((resolve) => setTimeout(resolve, 30));
 
   analyzeFlight(0);
+
+  // Swap the welcome hero for the working Home layout.
+  document.body.classList.add("log-loaded");
 }
 
 logFileInput.addEventListener("change", async () => {
@@ -1410,3 +1414,78 @@ clearHistoryButton.addEventListener("click", () => {
 
 refreshHistoryScreen();
 refreshCompareButtons();
+
+
+// ======================================================
+// Welcome hero (empty state): extra open/sample buttons,
+// window-wide drag & drop, and a status mirror so loading
+// feedback is visible before the hero yields to the cards.
+// ======================================================
+
+const welcomeHero = el("welcomeHero");
+const welcomeStatus = el("welcomeStatus");
+
+el("welcomeOpenButton").addEventListener("click", openFilePicker);
+el("welcomeSampleButton").addEventListener("click", () => {
+  trySampleButton.click();
+});
+
+// Mirror every fileStatus message into the hero while it is
+// visible — loading feedback happens before .log-loaded flips.
+new MutationObserver(() => {
+  if (welcomeStatus) {
+    welcomeStatus.textContent = fileStatus.textContent;
+  }
+}).observe(fileStatus, { childList: true, characterData: true, subtree: true });
+
+// Drag & drop a log anywhere onto the window.
+window.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  if (welcomeHero) welcomeHero.classList.add("drop-armed");
+});
+
+window.addEventListener("dragleave", (event) => {
+  if (event.relatedTarget === null && welcomeHero) {
+    welcomeHero.classList.remove("drop-armed");
+  }
+});
+
+window.addEventListener("drop", async (event) => {
+  event.preventDefault();
+  if (welcomeHero) welcomeHero.classList.remove("drop-armed");
+
+  const file = event.dataTransfer?.files?.[0];
+  if (!file) return;
+
+  try {
+    await loadFromFile(file);
+  } catch (error) {
+    fileStatus.textContent =
+      "Something went wrong reading this log: " + error.message;
+  }
+});
+
+// ======================================================
+// Update check on startup (silent when offline/current).
+// ======================================================
+
+const updateBanner = el("updateBanner");
+const UPDATE_DISMISS_KEY = "blackboxLabUpdateDismissed";
+
+checkForUpdate(APP_VERSION).then((update) => {
+  if (!update || !updateBanner) return;
+  if (localStorage.getItem(UPDATE_DISMISS_KEY) === update.version) return;
+
+  el("updateBannerText").textContent =
+    `A new version of Blackbox Lab is out (${update.version} — you have v${APP_VERSION}).`;
+  updateBanner.hidden = false;
+
+  el("updateBannerButton").addEventListener("click", () => {
+    window.blackboxLab?.openExternal?.(update.url);
+  });
+
+  el("updateBannerDismiss").addEventListener("click", () => {
+    localStorage.setItem(UPDATE_DISMISS_KEY, update.version);
+    updateBanner.hidden = true;
+  });
+});

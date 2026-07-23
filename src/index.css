@@ -609,3 +609,210 @@ body.advanced-mode details.advanced-block {
 .advisor-recommendation.priority-first span {
   color: var(--attention);
 }
+
+/* ---------------- welcome (empty state) ----------------
+   Warm and inviting on purpose: this is the one screen a
+   brand-new pilot sees before their first log. The rest of
+   the app stays calm navy; here we allow a little sunrise. */
+
+:root {
+  --warm: #ffc46b;
+  --warm-deep: #ff9d5c;
+  --mint: #3ecf8e;
+  --mint-deep: #22b377;
+}
+
+body.log-loaded .welcome { display: none; }
+body:not(.log-loaded) .loaded-only { display: none; }
+
+.welcome {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  padding: 58px 40px 46px 40px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -10%,
+      rgba(255, 196, 107, 0.16), transparent 60%),
+    linear-gradient(180deg, #12203a, var(--card));
+  margin-bottom: 18px;
+}
+
+.welcome.drop-armed {
+  border-color: var(--mint);
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -10%,
+      rgba(62, 207, 142, 0.2), transparent 60%),
+    linear-gradient(180deg, #12203a, var(--card));
+}
+
+.welcome-glow {
+  position: absolute;
+  inset: -40% -20% auto -20%;
+  height: 70%;
+  background: radial-gradient(ellipse at 50% 0%,
+    rgba(255, 157, 92, 0.12), transparent 65%);
+  pointer-events: none;
+}
+
+.welcome-copter {
+  font-size: 44px;
+  margin-bottom: 6px;
+  filter: drop-shadow(0 6px 16px rgba(255, 196, 107, 0.25));
+}
+
+.welcome-title {
+  font-size: 40px;
+  letter-spacing: -0.5px;
+  margin: 0 0 10px 0;
+  color: #ffffff;
+}
+
+.welcome-title span {
+  background: linear-gradient(90deg, var(--warm), var(--warm-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.welcome-sub {
+  max-width: 560px;
+  margin: 0 auto 26px auto;
+  color: var(--ink-soft);
+  font-size: 16px;
+}
+
+.welcome-actions {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.welcome-primary {
+  background: linear-gradient(180deg, var(--mint), var(--mint-deep));
+  color: #06281a;
+  border: none;
+  border-radius: 999px;
+  padding: 15px 30px;
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgba(62, 207, 142, 0.28);
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.welcome-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(62, 207, 142, 0.36);
+}
+
+.welcome-secondary {
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 15px 26px;
+  font-size: 15px;
+}
+
+.welcome-secondary:hover {
+  color: var(--ink);
+  background: var(--card-soft);
+}
+
+.welcome-drop-hint {
+  color: var(--ink-muted);
+  font-size: 13.5px;
+  margin: 16px 0 0 0;
+}
+
+.welcome-status {
+  color: var(--warm);
+  font-size: 14px;
+  min-height: 20px;
+  margin: 8px 0 0 0;
+}
+
+.welcome-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  max-width: 640px;
+  margin: 30px auto 0 auto;
+  text-align: left;
+}
+
+.welcome-step {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.welcome-step strong {
+  color: var(--ink);
+  font-size: 14.5px;
+}
+
+.welcome-step span:last-child {
+  color: var(--ink-muted);
+  font-size: 12.5px;
+}
+
+.welcome-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #06281a;
+  background: linear-gradient(180deg, var(--warm), var(--warm-deep));
+  margin-bottom: 6px;
+}
+
+/* ---------------- update banner ---------------- */
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(62, 207, 142, 0.09);
+  border: 1px solid rgba(62, 207, 142, 0.35);
+  border-radius: 12px;
+  padding: 11px 16px;
+  margin-bottom: 16px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.update-banner[hidden] { display: none; }
+
+.update-banner-button {
+  margin-left: auto;
+  background: var(--mint);
+  color: #06281a;
+  border: none;
+  border-radius: 999px;
+  padding: 7px 16px;
+  font-weight: 650;
+  font-size: 13px;
+}
+
+.update-banner-button:hover { background: #55dba0; }
+
+.update-banner-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--ink-muted);
+  font-size: 14px;
+  padding: 4px 6px;
+}
+
+.update-banner-dismiss:hover { color: var(--ink); }
