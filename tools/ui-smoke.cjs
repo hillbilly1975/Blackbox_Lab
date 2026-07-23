@@ -20,6 +20,13 @@ const { mkdirSync } = require("node:fs");
   await window.setViewportSize?.({ width: 1280, height: 900 }).catch(() => {});
 
   // ---- load the sample flight ----
+  // First launch shows the data-sharing consent ask now that the
+  // ingest endpoint is configured — answer it before anything else.
+  if (await window.isVisible("#contributeAsk")) {
+    await window.click("#askNo");
+    console.log("consent ask shown and dismissed");
+  }
+
   await window.click("#welcomeSampleButton");
   await window.waitForTimeout(3500);
 
