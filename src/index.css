@@ -693,6 +693,8 @@ body.advanced-mode details.advanced-block {
   color: var(--ink-muted);
   font-size: 12px;
   margin: 12px 0 0 0;
+}
+
 /* ---------------- open-log guard ---------------- */
 
 .nav-lock {
@@ -705,6 +707,7 @@ body.advanced-mode details.advanced-block {
   border-color: var(--accent-strong);
   color: #ffffff;
 }
+
 /* ---------------- welcome (empty state) ----------------
    Warm and inviting on purpose: this is the one screen a
    brand-new pilot sees before their first log. The rest of
@@ -911,6 +914,7 @@ body:not(.log-loaded) .loaded-only { display: none; }
 }
 
 .update-banner-dismiss:hover { color: var(--ink); }
+
 /* ---------------- chart footer (stats + zoom hint) ---------------- */
 
 .chart-footer {
@@ -945,11 +949,23 @@ body:not(.log-loaded) .loaded-only { display: none; }
   font-weight: 650;
 }
 
-.chart-hint {
+.chart-footer-hint {
   margin-left: auto;
   color: var(--ink-muted);
   font-size: 11.5px;
   letter-spacing: 0.3px;
   white-space: nowrap;
   opacity: 0.8;
+}
+
+/* lock icon is its own click target */
+.nav-lock {
+  cursor: pointer;
+  padding: 3px 7px;
+  margin: -3px -7px;
+  border-radius: 6px;
+}
+
+.nav-lock:hover {
+  background: rgba(111, 178, 255, 0.12);
 }

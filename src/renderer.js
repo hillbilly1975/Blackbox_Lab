@@ -187,6 +187,7 @@ function disarmOpenLog() {
   openLogButton.title = "";
   if (openLogLock && !openLogLock.hidden) {
     openLogLock.textContent = "🔒";
+    openLogButton.title = "Click the lock to open another log";
   }
   if (openLogArmTimer) {
     clearTimeout(openLogArmTimer);
@@ -194,24 +195,35 @@ function disarmOpenLog() {
   }
 }
 
+// Only the lock icon itself unlocks — clicks on the button
+// body do nothing while locked, so "toggle" habits can't
+// accidentally reopen the file dialog.
 openLogButton.addEventListener("click", () => {
   if (!loadedLog) {
     openFilePicker();
     return;
   }
 
-  if (!openLogArmed) {
-    openLogArmed = true;
-    openLogLock.hidden = false;
-    openLogLock.textContent = "🔓";
-    openLogButton.classList.add("armed");
-    openLogButton.title = "Click again to open another log";
-    openLogArmTimer = setTimeout(disarmOpenLog, 3000);
+  if (openLogArmed) {
+    disarmOpenLog();
+    openFilePicker();
+  }
+});
+
+openLogLock.addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (!loadedLog) return;
+
+  if (openLogArmed) {
+    disarmOpenLog();
     return;
   }
 
-  disarmOpenLog();
-  openFilePicker();
+  openLogArmed = true;
+  openLogLock.textContent = "🔓";
+  openLogButton.classList.add("armed");
+  openLogButton.title = "Unlocked — click to open another log";
+  openLogArmTimer = setTimeout(disarmOpenLog, 4000);
 });
 
 let loadedLog = null;

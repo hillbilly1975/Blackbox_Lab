@@ -136,7 +136,7 @@ function buildChartFooter(element, chart, seriesMeta, { withStats }) {
   footer.appendChild(stats);
 
   const hint = document.createElement("div");
-  hint.className = "chart-hint";
+  hint.className = "chart-footer-hint";
   hint.textContent = "drag to zoom · double-click to reset";
   footer.appendChild(hint);
 
