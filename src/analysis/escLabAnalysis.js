@@ -32,8 +32,10 @@ export function analyzeEscLab({ motor, amperage, vbat }) {
     return null;
   }
 
-  // Motor output is typically 1000–2000 style throttle units.
-  const fullScale = motorStats.max > 1100 ? 2000 : motorStats.max || 1;
+  // Motor output scale: Rotorflight logs 0–1000, classic
+  // Betaflight-style logs 1000–2000.
+  const fullScale =
+    motorStats.max > 1100 ? 2000 : motorStats.max > 100 ? 1000 : motorStats.max || 1;
   const headroomPercent = Math.max(
     0,
     ((fullScale - motorStats.average) / fullScale) * 100

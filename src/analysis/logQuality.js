@@ -33,17 +33,17 @@ export function assessLogQuality({
       level: "missing",
       note: "No gyro data in this log."
     });
-  } else if (!sampleRateHz || sampleRateHz < 800) {
+  } else if (!sampleRateHz || sampleRateHz < 400) {
     capabilities.push({
       name: "Vibration & filters",
       level: "partial",
-      note: `Logging rate ~${Math.round(sampleRateHz || 0)} Hz is too slow for tail-frequency vibration — raise the Blackbox rate to 2 kHz for full analysis.`
+      note: `Logging rate ~${Math.round(sampleRateHz || 0)} Hz is too slow for tail-frequency vibration — raise the Blackbox rate for the full picture.`
     });
-  } else if (sampleRateHz < 1500) {
+  } else if (sampleRateHz < 1000) {
     capabilities.push({
       name: "Vibration & filters",
       level: "partial",
-      note: `Logging rate ~${Math.round(sampleRateHz)} Hz sees main-rotor vibration fine; the highest tail/motor frequencies may fold back distorted.`
+      note: `Logging rate ~${Math.round(sampleRateHz)} Hz covers main-rotor and tail vibration; only very high motor/bearing frequencies are out of view.`
     });
   } else if (!hasUnfilteredGyro) {
     capabilities.push({

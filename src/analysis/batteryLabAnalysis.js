@@ -33,14 +33,30 @@ export function analyzeBatteryLab({ timeSeconds, vbat, amperage }) {
 
   const startVolts = averageOf(volts.slice(0, 100));
   const endVolts = averageOf(volts.slice(-100));
-  const minVolts = Math.min(...volts);
+
+  let minVolts = Infinity;
+
+  for (const value of volts) {
+    if (value < minVolts) {
+      minVolts = value;
+    }
+  }
 
   // Cell count: assume a full cell is ≤ 4.35 V.
   const cellCount = Math.max(1, Math.round(startVolts / 4.1));
   const sagPercent = ((startVolts - endVolts) / startVolts) * 100;
 
-  const ampsScale =
-    amperage && Math.max(...amperage) > 500 ? 100 : 1;
+  let maxAmperage = 0;
+
+  if (amperage) {
+    for (const value of amperage) {
+      if (value > maxAmperage) {
+        maxAmperage = value;
+      }
+    }
+  }
+
+  const ampsScale = maxAmperage > 500 ? 100 : 1;
   const amps = amperage
     ? amperage.map((value) => value / ampsScale)
     : null;
