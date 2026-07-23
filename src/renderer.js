@@ -170,7 +170,48 @@ function openFilePicker() {
 }
 
 chooseFileButton.addEventListener("click", openFilePicker);
-openLogButton.addEventListener("click", openFilePicker);
+
+// The sidebar "Open Blackbox Log" sits between navigation tabs and
+// is easy to hit by accident once a log is loaded. After the first
+// load it locks: one click arms it (🔓 — "click again"), a second
+// click within a few seconds opens the picker. Before any log is
+// loaded it behaves like a normal button.
+const openLogLock = el("openLogLock");
+let openLogArmed = false;
+let openLogArmTimer = null;
+
+function disarmOpenLog() {
+  openLogArmed = false;
+  openLogButton.classList.remove("armed");
+  openLogButton.title = "";
+  if (openLogLock && !openLogLock.hidden) {
+    openLogLock.textContent = "🔒";
+  }
+  if (openLogArmTimer) {
+    clearTimeout(openLogArmTimer);
+    openLogArmTimer = null;
+  }
+}
+
+openLogButton.addEventListener("click", () => {
+  if (!loadedLog) {
+    openFilePicker();
+    return;
+  }
+
+  if (!openLogArmed) {
+    openLogArmed = true;
+    openLogLock.hidden = false;
+    openLogLock.textContent = "🔓";
+    openLogButton.classList.add("armed");
+    openLogButton.title = "Click again to open another log";
+    openLogArmTimer = setTimeout(disarmOpenLog, 3000);
+    return;
+  }
+
+  disarmOpenLog();
+  openFilePicker();
+});
 
 let loadedLog = null;
 
@@ -187,6 +228,12 @@ async function loadFromFile(file) {
   }
 
   loadedLog = logData;
+
+  // A log is in — lock the sidebar button against stray clicks.
+  if (openLogLock) {
+    openLogLock.hidden = false;
+  }
+  disarmOpenLog();
 
   flightSelect.innerHTML = "";
 

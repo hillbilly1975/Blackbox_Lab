@@ -693,4 +693,15 @@ body.advanced-mode details.advanced-block {
   color: var(--ink-muted);
   font-size: 12px;
   margin: 12px 0 0 0;
+/* ---------------- open-log guard ---------------- */
+
+.nav-lock {
+  float: right;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.nav-button.armed {
+  border-color: var(--accent-strong);
+  color: #ffffff;
 }
