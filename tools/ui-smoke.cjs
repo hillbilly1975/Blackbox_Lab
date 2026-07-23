@@ -20,6 +20,13 @@ const { mkdirSync } = require("node:fs");
   await window.setViewportSize?.({ width: 1280, height: 900 }).catch(() => {});
 
   // ---- load the sample flight ----
+  // First launch shows the data-sharing consent ask now that the
+  // ingest endpoint is configured — answer it before anything else.
+  if (await window.isVisible("#contributeAsk")) {
+    await window.click("#askNo");
+    console.log("consent ask shown and dismissed");
+  }
+
   await window.click("#welcomeSampleButton");
   await window.waitForTimeout(3500);
 
@@ -30,6 +37,19 @@ const { mkdirSync } = require("node:fs");
   await window.screenshot({ path: "smoke-shots/01-verdict.png" });
 
   // ---- evidence zoom: click the vibration card's jump ----
+  
+  // Regression guard: charts must actually have scaled data —
+  // a null x-scale means uPlot never autoscaled (blank charts).
+  const chartState = await window.evaluate(() => {
+    const el = document.getElementById("chartGyro");
+    const u = el && el.__blackboxLabChart;
+    return u ? { xMin: u.scales.x.min, xMax: u.scales.x.max, len: u.data[0].length } : null;
+  });
+  if (!chartState || chartState.xMin == null || chartState.xMax <= chartState.xMin) {
+    throw new Error("chart x-scale not computed: " + JSON.stringify(chartState));
+  }
+  console.log("chart scale ok:", JSON.stringify(chartState));
+
   await window.click(".verdict-jump");
   await window.waitForTimeout(600);
   await window.screenshot({ path: "smoke-shots/02-filter-zoomed.png" });

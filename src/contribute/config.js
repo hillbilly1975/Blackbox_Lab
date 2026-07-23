@@ -7,8 +7,9 @@
 // Documentation/ingest-endpoint-setup.md
 // ======================================================
 
-export const CONTRIBUTE_ENDPOINT = "";
+export const CONTRIBUTE_ENDPOINT =
+  "https://blackbox-ingest.dlsinkjr22.workers.dev/";
 
 // Reported inside the payload so contributed logs can be
 // grouped by app version. Update alongside package.json.
-export const CONTRIBUTE_APP_VERSION = "0.3.1";
+export const CONTRIBUTE_APP_VERSION = "0.3.2";

@@ -22,16 +22,24 @@ Go to dash.cloudflare.com, sign up (free plan is plenty).
 
 ## Step 3 — Create the worker (the receiving address)
 
-1. Left sidebar: **Workers & Pages** → **Create** → **Worker**.
-2. Name it `blackbox-ingest`, deploy the hello-world it suggests.
+1. Left sidebar: **Workers & Pages** → **Create Application** →
+   on the "Ship something new" screen pick **Start with Hello
+   World!** (ignore the GitHub/GitLab and template options).
+2. Name it `blackbox-ingest` **before deploying** — if Cloudflare
+   gives it a random name (like `jolly-bush-1234`), rename it in
+   the worker's **Settings**; the name becomes part of the public
+   address, so a recognizable one is better.
 3. Click **Edit code**, delete everything, and paste the whole
    contents of `Documentation/ingest-worker.js` from this repo.
    Click **Deploy**.
-4. Back on the worker's page: **Settings** → **Bindings** →
-   **Add binding** → **R2 bucket**. Variable name: `LOGS`,
-   bucket: `blackbox-logs`. Save.
+4. On the worker's overview page, find the **Bindings** panel and
+   click **Add a binding** (the small **+**). Type: **R2 bucket**,
+   variable name: `LOGS`, bucket: `blackbox-logs`. Save — the
+   "No workers bound" note disappears.
 5. The worker's address is shown at the top — something like
    `https://blackbox-ingest.<your-name>.workers.dev`. Copy it.
+   Opening it in a browser should show "Blackbox Lab ingest" —
+   that's how you know it's alive.
 
 ## Step 4 — Tell the app about it
 
