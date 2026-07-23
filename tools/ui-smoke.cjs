@@ -20,7 +20,7 @@ const { mkdirSync } = require("node:fs");
   await window.setViewportSize?.({ width: 1280, height: 900 }).catch(() => {});
 
   // ---- load the sample flight ----
-  await window.click("#trySampleButton");
+  await window.click("#welcomeSampleButton");
   await window.waitForTimeout(3500);
 
   const verdictCount = await window.evaluate(

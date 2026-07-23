@@ -65,6 +65,107 @@ function watchResize(element, chart) {
 // ------------------------------------------------------
 // Time series (x axis in seconds of flight time)
 // ------------------------------------------------------
+// Raw log columns are numbered, not named — translate the
+// number into the axis a pilot thinks in. RF axis order:
+// 0 = Roll, 1 = Pitch, 2 = Yaw, 3 = Collective.
+const AXIS_NAMES = ["Roll", "Pitch", "Yaw", "Collective"];
+
+export function friendlySeriesLabel(name) {
+  const match = String(name).match(/^([A-Za-z]+)\[(\d)\]$/);
+  if (!match) return name;
+
+  const axis = AXIS_NAMES[Number(match[2])];
+  if (!axis) return name;
+
+  const base = match[1];
+  if (/^gyroADC$/i.test(base)) return `${axis} gyro (filtered)`;
+  if (/^(gyroRAW|gyroUnfilt)$/i.test(base)) return `${axis} gyro (raw)`;
+  if (/^setpoint$/i.test(base)) return `${axis} target`;
+  if (/^axis([PIDF])$/i.test(base)) {
+    return `${axis} ${base.slice(-1).toUpperCase()}-term`;
+  }
+  if (/^rcCommand$/i.test(base)) return `${axis} stick`;
+  return name;
+}
+
+// Min/max of each visible series, recomputed on every zoom.
+function computeVisibleStats(u, seriesMeta) {
+  const xs = u.data[0];
+  const xMin = u.scales.x.min;
+  const xMax = u.scales.x.max;
+  const stats = [];
+
+  for (let s = 0; s < seriesMeta.length && s < 3; s += 1) {
+    const ys = u.data[s + 1];
+    let min = Infinity;
+    let max = -Infinity;
+    let minX = null;
+    let maxX = null;
+
+    for (let i = 0; i < xs.length; i += 1) {
+      if (xs[i] < xMin || xs[i] > xMax) continue;
+      const value = ys[i];
+      if (value == null) continue;
+      if (value < min) { min = value; minX = xs[i]; }
+      if (value > max) { max = value; maxX = xs[i]; }
+    }
+
+    if (minX !== null) {
+      stats.push({
+        label: seriesMeta[s].label,
+        color: seriesMeta[s].color,
+        min, minX, max, maxX
+      });
+    }
+  }
+
+  return stats;
+}
+
+const fmt = (value) =>
+  Math.abs(value) >= 100
+    ? String(Math.round(value))
+    : String(Math.round(value * 10) / 10);
+
+function buildChartFooter(element, chart, seriesMeta, { withStats }) {
+  const footer = document.createElement("div");
+  footer.className = "chart-footer";
+
+  const stats = document.createElement("div");
+  stats.className = "chart-stats";
+  footer.appendChild(stats);
+
+  const hint = document.createElement("div");
+  hint.className = "chart-hint";
+  hint.textContent = "drag to zoom · double-click to reset";
+  footer.appendChild(hint);
+
+  element.appendChild(footer);
+
+  if (!withStats) return;
+
+  const refresh = () => {
+    const visible = computeVisibleStats(chart, seriesMeta);
+    stats.innerHTML = visible
+      .map(
+        (entry) =>
+          `<span class="chart-stat"><i style="background:${entry.color}"></i>` +
+          `${entry.label}: ` +
+          `<b>▾ ${fmt(entry.min)}</b> @ ${entry.minX.toFixed(1)}s · ` +
+          `<b>▴ ${fmt(entry.max)}</b> @ ${entry.maxX.toFixed(1)}s</span>`
+      )
+      .join("");
+  };
+
+  // uPlot only creates hook arrays declared in its options —
+  // make sure the slot exists before subscribing.
+  chart.hooks.setScale = chart.hooks.setScale || [];
+  chart.hooks.setScale.push((u, key) => {
+    if (key === "x") refresh();
+  });
+  refresh();
+}
+
 export function renderTimeSeriesChart(element, options) {
   const {
     timeSeconds,
@@ -93,6 +194,32 @@ export function renderTimeSeriesChart(element, options) {
       },
       hooks: {
         draw: [
+          // Small dots on each visible series' min and max —
+          // they move with the zoom window.
+          (u) => {
+            const meta = u.__seriesMeta;
+            if (!meta) return;
+
+            const ctx = u.ctx;
+            ctx.save();
+            for (const entry of computeVisibleStats(u, meta)) {
+              for (const point of [
+                [entry.minX, entry.min],
+                [entry.maxX, entry.max]
+              ]) {
+                const x = u.valToPos(point[0], "x", true);
+                const y = u.valToPos(point[1], "y", true);
+                ctx.beginPath();
+                ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+                ctx.fillStyle = entry.color;
+                ctx.fill();
+                ctx.strokeStyle = "rgba(7, 11, 18, 0.9)";
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+              }
+            }
+            ctx.restore();
+          },
           (u) => {
             if (!markers.length) {
               return;
@@ -147,7 +274,7 @@ export function renderTimeSeriesChart(element, options) {
             value == null ? "--" : value.toFixed(2)
         },
         ...series.map((entry, index) => ({
-          label: entry.label,
+          label: friendlySeriesLabel(entry.label),
           stroke: entry.color ?? CHART_COLORS[index % CHART_COLORS.length],
           width: 1.4,
           points: { show: false },
@@ -160,8 +287,15 @@ export function renderTimeSeriesChart(element, options) {
     element
   );
 
+  chart.__seriesMeta = series.map((entry, index) => ({
+    label: friendlySeriesLabel(entry.label),
+    color: entry.color ?? CHART_COLORS[index % CHART_COLORS.length]
+  }));
+
   element.__blackboxLabChart = chart;
   watchResize(element, chart);
+  buildChartFooter(element, chart, chart.__seriesMeta, { withStats: true });
+  chart.redraw();
 
   return chart;
 }
@@ -271,6 +405,7 @@ export function renderSpectrumChart(element, spectra, options = {}) {
 
   element.__blackboxLabChart = chart;
   watchResize(element, chart);
+  buildChartFooter(element, chart, [], { withStats: false });
 
   return chart;
 }

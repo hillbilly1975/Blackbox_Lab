@@ -11,6 +11,16 @@ import {
 } from "./ui/charts.js";
 import { buildReportHtml, downloadReport } from "./ui/reportBuilder.js";
 import { readLogFile } from "./analysis/logFileReader.js";
+import {
+  buildContribution,
+  describeContribution
+} from "./contribute/contributionBuilder.js";
+import { uploadContribution } from "./contribute/uploader.js";
+import {
+  CONTRIBUTE_ENDPOINT,
+  CONTRIBUTE_APP_VERSION
+} from "./contribute/config.js";
+import { APP_VERSION, checkForUpdate } from "./version.js";
 import { buildLogAnalysis } from "./analysis/logAnalysisBuilder.js";
 import { findTelemetryHeaderIndex } from "./analysis/telemetryHeader.js";
 import { getColumnValues } from "./analysis/mathHelpers.js";
@@ -161,7 +171,48 @@ function openFilePicker() {
 }
 
 chooseFileButton.addEventListener("click", openFilePicker);
-openLogButton.addEventListener("click", openFilePicker);
+
+// The sidebar "Open Blackbox Log" sits between navigation tabs and
+// is easy to hit by accident once a log is loaded. After the first
+// load it locks: one click arms it (🔓 — "click again"), a second
+// click within a few seconds opens the picker. Before any log is
+// loaded it behaves like a normal button.
+const openLogLock = el("openLogLock");
+let openLogArmed = false;
+let openLogArmTimer = null;
+
+function disarmOpenLog() {
+  openLogArmed = false;
+  openLogButton.classList.remove("armed");
+  openLogButton.title = "";
+  if (openLogLock && !openLogLock.hidden) {
+    openLogLock.textContent = "🔒";
+  }
+  if (openLogArmTimer) {
+    clearTimeout(openLogArmTimer);
+    openLogArmTimer = null;
+  }
+}
+
+openLogButton.addEventListener("click", () => {
+  if (!loadedLog) {
+    openFilePicker();
+    return;
+  }
+
+  if (!openLogArmed) {
+    openLogArmed = true;
+    openLogLock.hidden = false;
+    openLogLock.textContent = "🔓";
+    openLogButton.classList.add("armed");
+    openLogButton.title = "Click again to open another log";
+    openLogArmTimer = setTimeout(disarmOpenLog, 3000);
+    return;
+  }
+
+  disarmOpenLog();
+  openFilePicker();
+});
 
 let loadedLog = null;
 
@@ -179,6 +230,12 @@ async function loadFromFile(file) {
 
   loadedLog = logData;
 
+  // A log is in — lock the sidebar button against stray clicks.
+  if (openLogLock) {
+    openLogLock.hidden = false;
+  }
+  disarmOpenLog();
+
   flightSelect.innerHTML = "";
 
   logData.flights.forEach((flight, index) => {
@@ -195,6 +252,9 @@ async function loadFromFile(file) {
   await new Promise((resolve) => setTimeout(resolve, 30));
 
   analyzeFlight(0);
+
+  // Swap the welcome hero for the working Home layout.
+  document.body.classList.add("log-loaded");
 }
 
 logFileInput.addEventListener("change", async () => {
@@ -1089,6 +1149,11 @@ function analyzeFlight(flightIndex) {
   compareResultCard.hidden = true;
   compareChartCard.hidden = true;
 
+  // ---- community data sharing (opt-in, anonymized) ----
+  if (flight.mainFrames) {
+    maybeContributeFlight(flight, fileType, `${file.name}#${flightIndex}`);
+  }
+
   // Land the pilot on the answers, not the data.
   navigation.showScreen("home");
   document.querySelector(".workspace").scrollTop = 0;
@@ -1410,3 +1475,217 @@ clearHistoryButton.addEventListener("click", () => {
 
 refreshHistoryScreen();
 refreshCompareButtons();
+
+// ======================================================
+// Community data sharing — opt-in, anonymized.
+// Dormant unless CONTRIBUTE_ENDPOINT is configured.
+// ======================================================
+
+const CONTRIBUTE_PREF_KEY = "blackboxLabContribute";
+const CONTRIBUTE_CATS_KEY = "blackboxLabContributeCats";
+const contributedThisSession = new Set();
+
+const contributeCard = document.getElementById("contributeCard");
+const contributeToggle = document.getElementById("contributeToggle");
+const contributePower = document.getElementById("contributePower");
+const contributeGps = document.getElementById("contributeGps");
+const contributeSetup = document.getElementById("contributeSetup");
+const contributeStatus = document.getElementById("contributeStatus");
+const contributeAsk = document.getElementById("contributeAsk");
+
+function contributionEnabled() {
+  return (
+    Boolean(CONTRIBUTE_ENDPOINT) &&
+    localStorage.getItem(CONTRIBUTE_PREF_KEY) === "on"
+  );
+}
+
+function loadContributeCats() {
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(CONTRIBUTE_CATS_KEY) ?? ""
+    );
+    return {
+      power: stored.power === true,
+      gps: stored.gps === true,
+      setup: stored.setup === true
+    };
+  } catch {
+    return { power: true, gps: false, setup: true };
+  }
+}
+
+function saveContributeCats(cats) {
+  localStorage.setItem(CONTRIBUTE_CATS_KEY, JSON.stringify(cats));
+}
+
+function refreshContributeCard() {
+  if (!contributeCard) return;
+  contributeCard.hidden = !CONTRIBUTE_ENDPOINT;
+  if (!CONTRIBUTE_ENDPOINT) return;
+
+  const cats = loadContributeCats();
+  contributeToggle.checked =
+    localStorage.getItem(CONTRIBUTE_PREF_KEY) === "on";
+  contributePower.checked = cats.power;
+  contributeGps.checked = cats.gps;
+  contributeSetup.checked = cats.setup;
+
+  const disabled = !contributeToggle.checked;
+  [contributePower, contributeGps, contributeSetup].forEach((el) => {
+    el.disabled = disabled;
+  });
+}
+
+function maybeContributeFlight(flight, fileType, key) {
+  if (!contributionEnabled()) return;
+  if (contributedThisSession.has(key)) return;
+  contributedThisSession.add(key);
+
+  const payload = buildContribution(
+    flight,
+    fileType,
+    loadContributeCats(),
+    CONTRIBUTE_APP_VERSION
+  );
+
+  if (contributeStatus) {
+    contributeStatus.textContent = `Sharing: ${describeContribution(payload)} …`;
+  }
+
+  uploadContribution(CONTRIBUTE_ENDPOINT, payload)
+    .then((result) => {
+      if (contributeStatus) {
+        contributeStatus.textContent = result.ok
+          ? "Last log shared anonymously — thank you for helping the tool learn. ✓"
+          : `Sharing failed (server said ${result.status}) — the tool keeps working normally.`;
+      }
+    })
+    .catch(() => {
+      if (contributeStatus) {
+        contributeStatus.textContent =
+          "Sharing failed (no connection) — the tool keeps working normally.";
+      }
+    });
+}
+
+if (contributeToggle) {
+  contributeToggle.addEventListener("change", () => {
+    localStorage.setItem(
+      CONTRIBUTE_PREF_KEY,
+      contributeToggle.checked ? "on" : "off"
+    );
+    refreshContributeCard();
+  });
+
+  [contributePower, contributeGps, contributeSetup].forEach((el) => {
+    el.addEventListener("change", () => {
+      saveContributeCats({
+        power: contributePower.checked,
+        gps: contributeGps.checked,
+        setup: contributeSetup.checked
+      });
+    });
+  });
+}
+
+if (contributeAsk && CONTRIBUTE_ENDPOINT) {
+  const answered = localStorage.getItem(CONTRIBUTE_PREF_KEY) !== null;
+
+  if (!answered) {
+    contributeAsk.hidden = false;
+
+    document.getElementById("askYes").addEventListener("click", () => {
+      localStorage.setItem(CONTRIBUTE_PREF_KEY, "on");
+      saveContributeCats({
+        power: document.getElementById("askPower").checked,
+        gps: document.getElementById("askGps").checked,
+        setup: document.getElementById("askSetup").checked
+      });
+      contributeAsk.hidden = true;
+      refreshContributeCard();
+    });
+
+    document.getElementById("askNo").addEventListener("click", () => {
+      localStorage.setItem(CONTRIBUTE_PREF_KEY, "off");
+      contributeAsk.hidden = true;
+      refreshContributeCard();
+    });
+  }
+}
+
+refreshContributeCard();
+
+// ======================================================
+// Welcome hero (empty state): extra open/sample buttons,
+// window-wide drag & drop, and a status mirror so loading
+// feedback is visible before the hero yields to the cards.
+// ======================================================
+
+const welcomeHero = el("welcomeHero");
+const welcomeStatus = el("welcomeStatus");
+
+el("welcomeOpenButton").addEventListener("click", openFilePicker);
+el("welcomeSampleButton").addEventListener("click", () => {
+  trySampleButton.click();
+});
+
+// Mirror every fileStatus message into the hero while it is
+// visible — loading feedback happens before .log-loaded flips.
+new MutationObserver(() => {
+  if (welcomeStatus) {
+    welcomeStatus.textContent = fileStatus.textContent;
+  }
+}).observe(fileStatus, { childList: true, characterData: true, subtree: true });
+
+// Drag & drop a log anywhere onto the window.
+window.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  if (welcomeHero) welcomeHero.classList.add("drop-armed");
+});
+
+window.addEventListener("dragleave", (event) => {
+  if (event.relatedTarget === null && welcomeHero) {
+    welcomeHero.classList.remove("drop-armed");
+  }
+});
+
+window.addEventListener("drop", async (event) => {
+  event.preventDefault();
+  if (welcomeHero) welcomeHero.classList.remove("drop-armed");
+
+  const file = event.dataTransfer?.files?.[0];
+  if (!file) return;
+
+  try {
+    await loadFromFile(file);
+  } catch (error) {
+    fileStatus.textContent =
+      "Something went wrong reading this log: " + error.message;
+  }
+});
+
+// ======================================================
+// Update check on startup (silent when offline/current).
+// ======================================================
+
+const updateBanner = el("updateBanner");
+const UPDATE_DISMISS_KEY = "blackboxLabUpdateDismissed";
+
+checkForUpdate(APP_VERSION).then((update) => {
+  if (!update || !updateBanner) return;
+  if (localStorage.getItem(UPDATE_DISMISS_KEY) === update.version) return;
+
+  el("updateBannerText").textContent =
+    `A new version of Blackbox Lab is out (${update.version} — you have v${APP_VERSION}).`;
+  updateBanner.hidden = false;
+
+  el("updateBannerButton").addEventListener("click", () => {
+    window.blackboxLab?.openExternal?.(update.url);
+  });
+
+  el("updateBannerDismiss").addEventListener("click", () => {
+    localStorage.setItem(UPDATE_DISMISS_KEY, update.version);
+    updateBanner.hidden = true;
+  });
+});
