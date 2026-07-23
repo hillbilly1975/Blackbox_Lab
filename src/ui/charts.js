@@ -194,6 +194,11 @@ export function renderTimeSeriesChart(element, options) {
     ...series.map((entry) => Float64Array.from(entry.values))
   ];
 
+  const seriesMeta = series.map((entry, index) => ({
+    label: friendlyLabel(entry.label),
+    color: entry.color ?? CHART_COLORS[index % CHART_COLORS.length]
+  }));
+
   const chart = new uPlot(
     {
       width: element.clientWidth || 640,
@@ -208,12 +213,9 @@ export function renderTimeSeriesChart(element, options) {
           // Small dots on each visible series' min and max —
           // they move with the zoom window.
           (u) => {
-            const meta = u.__seriesMeta;
-            if (!meta) return;
-
             const ctx = u.ctx;
             ctx.save();
-            for (const entry of computeVisibleStats(u, meta)) {
+            for (const entry of computeVisibleStats(u, seriesMeta)) {
               for (const point of [
                 [entry.minX, entry.min],
                 [entry.maxX, entry.max]
@@ -298,15 +300,9 @@ export function renderTimeSeriesChart(element, options) {
     element
   );
 
-  chart.__seriesMeta = series.map((entry, index) => ({
-    label: friendlyLabel(entry.label),
-    color: entry.color ?? CHART_COLORS[index % CHART_COLORS.length]
-  }));
-
   element.__blackboxLabChart = chart;
   watchResize(element, chart);
-  buildChartFooter(element, chart, chart.__seriesMeta, { withStats: true });
-  chart.redraw();
+  buildChartFooter(element, chart, seriesMeta, { withStats: true });
 
   return chart;
 }
