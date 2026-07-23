@@ -83,6 +83,7 @@ const pidAnalysisFindings = el("pidAnalysisFindings");
 const pidAnalysisRecommendations = el("pidAnalysisRecommendations");
 
 const chartGyro = el("chartGyro");
+const chartThrottle = el("chartThrottle");
 const chartTracking = el("chartTracking");
 const chartHeadspeed = el("chartHeadspeed");
 const chartPower = el("chartPower");
@@ -709,10 +710,79 @@ function renderSeriesChart(element, dataset, patterns, options = {}) {
   });
 }
 
+// ---- unit conversion for display ----
+// Logs store raw units: throttle 0-1000 (Rotorflight) or
+// 1000-2000 (Betaflight-style), volts x100, amps x100.
+function toThrottlePercent(values) {
+  let max = 0;
+
+  for (const value of values) {
+    if (value > max) max = value;
+  }
+
+  if (max > 1100) {
+    return values.map((value) => Math.max(0, (value - 1000) / 10));
+  }
+
+  if (max > 100) {
+    return values.map((value) => value / 10);
+  }
+
+  return values;
+}
+
+function toVolts(values) {
+  let sum = 0;
+
+  for (const value of values) sum += value;
+  const average = values.length ? sum / values.length : 0;
+  const scale = average > 1000 ? 100 : average > 100 ? 10 : 1;
+  return values.map((value) => value / scale);
+}
+
+function toAmps(values) {
+  let max = 0;
+
+  for (const value of values) {
+    if (value > max) max = value;
+  }
+
+  const scale = max > 500 ? 100 : 1;
+  return values.map((value) => value / scale);
+}
+
+function renderScaledChart(element, dataset, entries, yLabel) {
+  const series = [];
+
+  for (const entry of entries) {
+    const column = dataset.findColumnsIn(entry.patterns)[0];
+
+    if (column) {
+      series.push({
+        label: entry.label ?? column,
+        values: decimate(entry.convert(dataset.columnValues(column))),
+        color: CHART_COLORS[series.length % CHART_COLORS.length]
+      });
+    }
+  }
+
+  if (series.length === 0) {
+    element.innerHTML =
+      '<p class="chart-empty">This log has no data for this chart.</p>';
+    return;
+  }
+
+  renderTimeSeriesChart(element, {
+    timeSeconds: decimate(dataset.timeSeconds),
+    series,
+    yLabel
+  });
+}
+
 function renderAllCharts(dataset) {
   if (!dataset) {
     for (const element of [
-      chartGyro, chartTracking, chartHeadspeed, chartPower,
+      chartGyro, chartTracking, chartHeadspeed, chartThrottle, chartPower,
       chartSpectrum, chartGovernor, chartEsc, chartBattery
     ]) {
       element.innerHTML =
@@ -740,11 +810,24 @@ function renderAllCharts(dataset) {
     { yLabel: "rpm" }
   );
 
-  renderSeriesChart(
+  renderScaledChart(
+    chartThrottle,
+    dataset,
+    [
+      { patterns: [/^motor\[0\]/i], label: "main motor %", convert: toThrottlePercent },
+      { patterns: [/^motor\[1\]/i], label: "motor 2 %", convert: toThrottlePercent }
+    ],
+    "throttle (%)"
+  );
+
+  renderScaledChart(
     chartPower,
     dataset,
-    [/^motor\[/i, /^vbat/i, /amperage/i, /^Ibat/i, /current/i],
-    { yLabel: "" }
+    [
+      { patterns: [/^vbat/i], label: "pack voltage (V)", convert: toVolts },
+      { patterns: [/amperage/i, /^Ibat/i, /current/i], label: "current (A)", convert: toAmps }
+    ],
+    "volts · amps"
   );
 
   {
@@ -778,11 +861,22 @@ function renderAllCharts(dataset) {
     }
   }
 
-  renderSeriesChart(chartEsc, dataset, [/^motor\[/i], { yLabel: "throttle" });
+  renderScaledChart(
+    chartEsc,
+    dataset,
+    [
+      { patterns: [/^motor\[0\]/i], label: "main motor %", convert: toThrottlePercent },
+      { patterns: [/^motor\[1\]/i], label: "motor 2 %", convert: toThrottlePercent }
+    ],
+    "throttle (%)"
+  );
 
-  renderSeriesChart(chartBattery, dataset, [/vbat/i], {
-    yLabel: "voltage (as logged)"
-  });
+  renderScaledChart(
+    chartBattery,
+    dataset,
+    [{ patterns: [/^vbat/i], label: "pack voltage (V)", convert: toVolts }],
+    "pack voltage (V)"
+  );
 
   if (dataset.spectra.length > 0) {
     renderSpectrumChart(chartSpectrum, dataset.spectra, {
@@ -1030,7 +1124,8 @@ buildReportButton.addEventListener("click", () => {
       { title: "Gyro", element: chartGyro },
       { title: "Setpoint vs Gyro", element: chartTracking },
       { title: "Headspeed & Governor", element: chartGovernor },
-      { title: "Motor & Power", element: chartPower }
+      { title: "Throttle", element: chartThrottle },
+      { title: "Battery & Current", element: chartPower }
     ]
   });
 

@@ -244,9 +244,21 @@
         </section>
 
         <section class="card">
-          <h3>Motor &amp; Power</h3>
+          <h3>Throttle</h3>
           <p class="chart-hint">
-            Throttle output, voltage and current draw.
+            Motor output in percent — flat tops at 100% mean the
+            power system has nothing left to give.
+          </p>
+          <div class="chart-container" id="chartThrottle">
+            <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+        </section>
+
+        <section class="card">
+          <h3>Battery &amp; Current</h3>
+          <p class="chart-hint">
+            Pack voltage (V) and current draw (A) — watch the
+            voltage dip exactly when the amps spike.
           </p>
           <div class="chart-container" id="chartPower">
             <p class="chart-empty">Open a log to see this chart.</p>
