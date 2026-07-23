@@ -609,3 +609,16 @@ body.advanced-mode details.advanced-block {
 .advisor-recommendation.priority-first span {
   color: var(--attention);
 }
+
+/* ---------------- open-log guard ---------------- */
+
+.nav-lock {
+  float: right;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.nav-button.armed {
+  border-color: var(--accent-strong);
+  color: #ffffff;
+}
