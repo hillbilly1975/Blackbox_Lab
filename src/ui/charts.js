@@ -88,6 +88,17 @@ export function friendlySeriesLabel(name) {
   return name;
 }
 
+const WHOLE_NAME_LABELS = {
+  headspeed: "Headspeed",
+  govTarget: "Governor target",
+  vbatLatest: "Pack voltage",
+  Vbat: "Pack voltage"
+};
+
+export function friendlyLabel(name) {
+  return WHOLE_NAME_LABELS[name] ?? friendlySeriesLabel(name);
+}
+
 // Min/max of each visible series, recomputed on every zoom.
 function computeVisibleStats(u, seriesMeta) {
   const xs = u.data[0];
@@ -274,7 +285,7 @@ export function renderTimeSeriesChart(element, options) {
             value == null ? "--" : value.toFixed(2)
         },
         ...series.map((entry, index) => ({
-          label: friendlySeriesLabel(entry.label),
+          label: friendlyLabel(entry.label),
           stroke: entry.color ?? CHART_COLORS[index % CHART_COLORS.length],
           width: 1.4,
           points: { show: false },
@@ -288,7 +299,7 @@ export function renderTimeSeriesChart(element, options) {
   );
 
   chart.__seriesMeta = series.map((entry, index) => ({
-    label: friendlySeriesLabel(entry.label),
+    label: friendlyLabel(entry.label),
     color: entry.color ?? CHART_COLORS[index % CHART_COLORS.length]
   }));
 
@@ -390,7 +401,7 @@ export function renderSpectrumChart(element, spectra, options = {}) {
             value == null ? "--" : value.toFixed(0)
         },
         ...spectra.map((entry, index) => ({
-          label: entry.label,
+          label: friendlyLabel(entry.label),
           stroke: entry.color ?? CHART_COLORS[index % CHART_COLORS.length],
           width: 1.4,
           points: { show: false },

@@ -11,4 +11,4 @@ export const CONTRIBUTE_ENDPOINT = "";
 
 // Reported inside the payload so contributed logs can be
 // grouped by app version. Update alongside package.json.
-export const CONTRIBUTE_APP_VERSION = "0.3.1";
+export const CONTRIBUTE_APP_VERSION = "0.3.2";

@@ -1,7 +1,7 @@
 {
   "name": "blackbox-lab",
   "productName": "Blackbox Lab",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Rotorflight Blackbox analysis suite \u2014 simple first, deeper when you want it.",
   "main": "src/index.js",
   "private": true,
