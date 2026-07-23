@@ -42,8 +42,52 @@ export function decodedFlightToCsvLines(flight) {
   }
 
   // ---- column header row ----
+    // Add compatibility aliases expected by the existing analysis pipeline.
+  const mainNames = [...flight.mainFieldNames];
+
+  const addAlias = (sourceName, aliasName) => {
+    const sourceIndex = mainNames.indexOf(sourceName);
+
+    if (sourceIndex >= 0 && !mainNames.includes(aliasName)) {
+      mainNames.push(aliasName);
+    }
+  };
+
+  addAlias("Vbat", "vbatLatest");
   const slowNames = flight.slowFieldNames;
-  const columnNames = [...flight.mainFieldNames, ...slowNames];
+const columnNames = [...mainNames, ...slowNames];
+  const diagnosticNames = [
+  "time",
+  "gyroRAW[0]",
+  "gyroRAW[1]",
+  "gyroRAW[2]",
+  "gyroADC[0]",
+  "gyroADC[1]",
+  "gyroADC[2]",
+  "setpoint[0]",
+  "axisP[0]",
+  "axisI[0]",
+  "axisD[0]",
+  "axisF[0]",
+  "headspeed",
+  "govTarget",
+  "motor[0]",
+  "vbatLatest"
+];
+
+console.log(
+  "Native BBL diagnostic columns:",
+  diagnosticNames.map((name) => ({
+    name,
+    index: columnNames.indexOf(name)
+  }))
+);
+console.log(
+  "Native BBL relevant field names:",
+  columnNames.filter((name) =>
+    /gyro|axis|setpoint|head|gov|motor|vbat|volt|esc/i.test(name)
+  )
+);
   lines.push(columnNames.join(","));
 
   // ---- data rows with slow values carried forward ----
@@ -70,14 +114,24 @@ export function decodedFlightToCsvLines(flight) {
 
     const main = flight.mainFrames[frameIndex];
     const row = new Array(columnNames.length);
+const aliasValues = [];
 
+const vbatIndex = flight.mainFieldNames.indexOf("Vbat");
+
+if (vbatIndex >= 0 && mainNames.includes("vbatLatest")) {
+  aliasValues.push(main[vbatIndex]);
+}
     for (let i = 0; i < main.length; i += 1) {
       row[i] = main[i];
     }
 
-    for (let i = 0; i < slowCurrent.length; i += 1) {
-      row[main.length + i] = slowCurrent[i];
-    }
+    for (let i = 0; i < aliasValues.length; i += 1) {
+  row[main.length + i] = aliasValues[i];
+}
+
+for (let i = 0; i < slowCurrent.length; i += 1) {
+  row[main.length + aliasValues.length + i] = slowCurrent[i];
+}
 
     lines.push(row.join(","));
   }

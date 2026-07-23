@@ -47,10 +47,15 @@ function watchResize(element, chart) {
   }
 
   const observer = new ResizeObserver(() => {
-    chart.setSize({
-      width: element.clientWidth,
-      height: chart.height
-    });
+    // A hidden screen reports width 0 — resizing to that
+    // would wipe the chart's pixels (and empty the images
+    // embedded in HTML reports). Keep the last real size.
+    if (element.clientWidth > 0) {
+      chart.setSize({
+        width: element.clientWidth,
+        height: chart.height
+      });
+    }
   });
 
   observer.observe(element);
@@ -197,6 +202,9 @@ export function renderSpectrumChart(element, spectra, options = {}) {
             ctx.font = "12px sans-serif";
             ctx.textAlign = "center";
 
+            let labelRow = 0;
+            let lastLabelX = -Infinity;
+
             for (const marker of markers) {
               const x = u.valToPos(marker.hz, "x", true);
 
@@ -208,7 +216,17 @@ export function renderSpectrumChart(element, spectra, options = {}) {
               ctx.moveTo(x, u.bbox.top);
               ctx.lineTo(x, u.bbox.top + u.bbox.height);
               ctx.stroke();
-              ctx.fillText(marker.label, x, u.bbox.top + 14);
+
+              // Stagger labels vertically when peaks crowd
+              // together, so they never overprint each other.
+              if (x - lastLabelX < 150) {
+                labelRow = (labelRow + 1) % 3;
+              } else {
+                labelRow = 0;
+              }
+
+              lastLabelX = x;
+              ctx.fillText(marker.label, x, u.bbox.top + 14 + labelRow * 15);
             }
 
             ctx.restore();

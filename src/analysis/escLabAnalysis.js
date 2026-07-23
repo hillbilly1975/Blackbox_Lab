@@ -32,8 +32,10 @@ export function analyzeEscLab({ motor, amperage, vbat }) {
     return null;
   }
 
-  // Motor output is typically 1000–2000 style throttle units.
-  const fullScale = motorStats.max > 1100 ? 2000 : motorStats.max || 1;
+  // Motor output scale: Rotorflight logs 0–1000, classic
+  // Betaflight-style logs 1000–2000.
+  const fullScale =
+    motorStats.max > 1100 ? 2000 : motorStats.max > 100 ? 1000 : motorStats.max || 1;
   const headroomPercent = Math.max(
     0,
     ((fullScale - motorStats.average) / fullScale) * 100
@@ -74,15 +76,17 @@ export function analyzeEscLab({ motor, amperage, vbat }) {
   const status =
     saturationPercent > 2 ? "attention" : headroomPercent < 12 ? "watch" : "good";
 
+  const averagePercent = Math.round((motorStats.average / fullScale) * 100);
+
   const story =
     status === "good"
-      ? `Healthy headroom: throttle averages ${Math.round(motorStats.average)} with ${headroomPercent.toFixed(0)}% in reserve.`
+      ? `Healthy headroom: throttle averages ${averagePercent}% with ${headroomPercent.toFixed(0)}% in reserve.`
       : status === "watch"
         ? `Working hard: only ${headroomPercent.toFixed(0)}% average throttle reserve. Fine for sport flying, tight for aggressive 3D.`
         : `The ESC hits its ceiling ${saturationPercent.toFixed(1)}% of the time — when it saturates, the governor has nothing left to give. Consider more cells, lower headspeed or different gearing.`;
 
   const metrics = [
-    { label: "Average throttle", value: `${Math.round(motorStats.average)}` },
+    { label: "Average throttle", value: `${averagePercent}%` },
     { label: "Throttle reserve", value: `${headroomPercent.toFixed(0)}%` },
     { label: "Time at ceiling", value: `${saturationPercent.toFixed(1)}%` }
   ];

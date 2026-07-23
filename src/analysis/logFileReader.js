@@ -84,7 +84,7 @@ export async function readLogFile(file) {
   return {
     file,
     sizeKb,
-    fileType: identifyFile(lines),
+    fileType: identifyFile(lines, file.name),
     isBinary: false,
     flights: [
       {

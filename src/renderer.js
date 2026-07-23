@@ -83,6 +83,7 @@ const pidAnalysisFindings = el("pidAnalysisFindings");
 const pidAnalysisRecommendations = el("pidAnalysisRecommendations");
 
 const chartGyro = el("chartGyro");
+const chartThrottle = el("chartThrottle");
 const chartTracking = el("chartTracking");
 const chartHeadspeed = el("chartHeadspeed");
 const chartPower = el("chartPower");
@@ -165,6 +166,9 @@ openLogButton.addEventListener("click", openFilePicker);
 let loadedLog = null;
 
 async function loadFromFile(file) {
+  fileStatus.textContent = `Reading ${file.name}...`;
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
   const logData = await readLogFile(file);
 
   if (!logData || logData.flights.length === 0) {
@@ -185,6 +189,10 @@ async function loadFromFile(file) {
   });
 
   flightPicker.hidden = logData.flights.length < 2;
+
+  fileStatus.textContent =
+    "Analyzing flight... (big logs take a few seconds)";
+  await new Promise((resolve) => setTimeout(resolve, 30));
 
   analyzeFlight(0);
 }
@@ -242,8 +250,10 @@ flightSelect.addEventListener("change", () => {
 // 04. DATASET
 // ======================================================
 
+const UNFILTERED_GYRO_PATTERNS = [/^gyroUnfilt/i, /^gyroRAW/i];
+
 function hasOwnUnfiltered(headerLine) {
-  return findColumns(headerLine, [/^gyroUnfilt/i]).length > 0;
+  return findColumns(headerLine, UNFILTERED_GYRO_PATTERNS).length > 0;
 }
 
 function findColumns(headerLine, patterns) {
@@ -279,6 +289,29 @@ function averageOf(values) {
   return values.length ? sum / values.length : null;
 }
 
+// Parse every data row exactly once. On big logs (100k+
+// frames) splitting the lines per column read costs seconds;
+// this table makes each column access instant.
+function buildColumnTable(lines, headerIndex) {
+  const names = lines[headerIndex].split(",").map((name) => name.trim());
+  const table = new Map(names.map((name) => [name, []]));
+  const columns = names.map((name) => table.get(name));
+
+  for (let row = headerIndex + 1; row < lines.length; row += 1) {
+    const parts = lines[row].split(",");
+
+    for (let i = 0; i < columns.length; i += 1) {
+      const value = Number(parts[i]);
+
+      if (Number.isFinite(value)) {
+        columns[i].push(value);
+      }
+    }
+  }
+
+  return table;
+}
+
 function buildDataset(lines, pidAnalysis) {
   const headerIndex = findTelemetryHeaderIndex(lines);
 
@@ -287,7 +320,8 @@ function buildDataset(lines, pidAnalysis) {
   }
 
   const headerLine = lines[headerIndex];
-  const columnValues = (name) => getColumnValues(lines, headerIndex, name);
+  const columnTable = buildColumnTable(lines, headerIndex);
+  const columnValues = (name) => columnTable.get(name) ?? [];
   const firstColumn = (patterns) => {
     const matches = findColumns(headerLine, patterns);
 
@@ -313,8 +347,8 @@ function buildDataset(lines, pidAnalysis) {
 
   const headspeed = firstColumn([/headspeed/i, /^rpm/i]);
   const governorTarget = firstColumn([/governorTarget/i, /govTarget/i, /governor/i]);
-  const vbat = firstColumn([/vbat/i]);
-  const amperage = firstColumn([/amperage/i, /current/i]);
+  const vbat = firstColumn([/^vbat/i]);
+  const amperage = firstColumn([/amperage/i, /^Ibat/i, /current/i, /^EscI$/i]);
   const motor = firstColumn([/^motor\[0\]/i]);
 
   // ---- spectra + labelled peaks ----
@@ -326,7 +360,7 @@ function buildDataset(lines, pidAnalysis) {
   // header order, so ask for unfiltered explicitly first
   // and fall back to the filtered trace only if a log has
   // nothing better.
-  const unfilteredColumns = findColumns(headerLine, [/^gyroUnfilt/i]);
+  const unfilteredColumns = findColumns(headerLine, UNFILTERED_GYRO_PATTERNS);
   const gyroColumnNames = (
     unfilteredColumns.length > 0
       ? unfilteredColumns
@@ -387,7 +421,13 @@ function buildDataset(lines, pidAnalysis) {
     let strongestValue = 0;
 
     spectra.forEach((entry, index) => {
-      const peak = Math.max(...entry.spectrum.magnitudes);
+      let peak = 0;
+
+      for (const value of entry.spectrum.magnitudes) {
+        if (value > peak) {
+          peak = value;
+        }
+      }
 
       if (peak > strongestValue) {
         strongestValue = peak;
@@ -492,6 +532,18 @@ function buildDataset(lines, pidAnalysis) {
   };
 }
 
+function spectrumPeakValue(spectrum) {
+  let peak = 0;
+
+  for (const value of spectrum.magnitudes) {
+    if (value > peak) {
+      peak = value;
+    }
+  }
+
+  return peak;
+}
+
 function buildSpectrumMarkers(spectra, headspeedRpm) {
   if (!spectra.length) {
     return [];
@@ -501,8 +553,7 @@ function buildSpectrumMarkers(spectra, headspeedRpm) {
   let strongest = spectra[0];
 
   for (const entry of spectra) {
-    const peak = Math.max(...entry.spectrum.magnitudes);
-    if (peak > Math.max(...strongest.spectrum.magnitudes)) {
+    if (spectrumPeakValue(entry.spectrum) > spectrumPeakValue(strongest.spectrum)) {
       strongest = entry;
     }
   }
@@ -659,10 +710,79 @@ function renderSeriesChart(element, dataset, patterns, options = {}) {
   });
 }
 
+// ---- unit conversion for display ----
+// Logs store raw units: throttle 0-1000 (Rotorflight) or
+// 1000-2000 (Betaflight-style), volts x100, amps x100.
+function toThrottlePercent(values) {
+  let max = 0;
+
+  for (const value of values) {
+    if (value > max) max = value;
+  }
+
+  if (max > 1100) {
+    return values.map((value) => Math.max(0, (value - 1000) / 10));
+  }
+
+  if (max > 100) {
+    return values.map((value) => value / 10);
+  }
+
+  return values;
+}
+
+function toVolts(values) {
+  let sum = 0;
+
+  for (const value of values) sum += value;
+  const average = values.length ? sum / values.length : 0;
+  const scale = average > 1000 ? 100 : average > 100 ? 10 : 1;
+  return values.map((value) => value / scale);
+}
+
+function toAmps(values) {
+  let max = 0;
+
+  for (const value of values) {
+    if (value > max) max = value;
+  }
+
+  const scale = max > 500 ? 100 : 1;
+  return values.map((value) => value / scale);
+}
+
+function renderScaledChart(element, dataset, entries, yLabel) {
+  const series = [];
+
+  for (const entry of entries) {
+    const column = dataset.findColumnsIn(entry.patterns)[0];
+
+    if (column) {
+      series.push({
+        label: entry.label ?? column,
+        values: decimate(entry.convert(dataset.columnValues(column))),
+        color: CHART_COLORS[series.length % CHART_COLORS.length]
+      });
+    }
+  }
+
+  if (series.length === 0) {
+    element.innerHTML =
+      '<p class="chart-empty">This log has no data for this chart.</p>';
+    return;
+  }
+
+  renderTimeSeriesChart(element, {
+    timeSeconds: decimate(dataset.timeSeconds),
+    series,
+    yLabel
+  });
+}
+
 function renderAllCharts(dataset) {
   if (!dataset) {
     for (const element of [
-      chartGyro, chartTracking, chartHeadspeed, chartPower,
+      chartGyro, chartTracking, chartHeadspeed, chartThrottle, chartPower,
       chartSpectrum, chartGovernor, chartEsc, chartBattery
     ]) {
       element.innerHTML =
@@ -672,7 +792,7 @@ function renderAllCharts(dataset) {
     return;
   }
 
-  renderSeriesChart(chartGyro, dataset, [/^gyroADC/i, /^gyroUnfilt/i], {
+  renderSeriesChart(chartGyro, dataset, [/^gyroADC/i, /^gyroUnfilt/i, /^gyroRAW/i], {
     yLabel: "deg/s"
   });
 
@@ -690,11 +810,24 @@ function renderAllCharts(dataset) {
     { yLabel: "rpm" }
   );
 
-  renderSeriesChart(
+  renderScaledChart(
+    chartThrottle,
+    dataset,
+    [
+      { patterns: [/^motor\[0\]/i], label: "main motor %", convert: toThrottlePercent },
+      { patterns: [/^motor\[1\]/i], label: "motor 2 %", convert: toThrottlePercent }
+    ],
+    "throttle (%)"
+  );
+
+  renderScaledChart(
     chartPower,
     dataset,
-    [/^motor\[/i, /vbat/i, /amperage/i, /current/i],
-    { yLabel: "" }
+    [
+      { patterns: [/^vbat/i], label: "pack voltage (V)", convert: toVolts },
+      { patterns: [/amperage/i, /^Ibat/i, /current/i], label: "current (A)", convert: toAmps }
+    ],
+    "volts · amps"
   );
 
   {
@@ -728,11 +861,22 @@ function renderAllCharts(dataset) {
     }
   }
 
-  renderSeriesChart(chartEsc, dataset, [/^motor\[/i], { yLabel: "throttle" });
+  renderScaledChart(
+    chartEsc,
+    dataset,
+    [
+      { patterns: [/^motor\[0\]/i], label: "main motor %", convert: toThrottlePercent },
+      { patterns: [/^motor\[1\]/i], label: "motor 2 %", convert: toThrottlePercent }
+    ],
+    "throttle (%)"
+  );
 
-  renderSeriesChart(chartBattery, dataset, [/vbat/i], {
-    yLabel: "voltage (as logged)"
-  });
+  renderScaledChart(
+    chartBattery,
+    dataset,
+    [{ patterns: [/^vbat/i], label: "pack voltage (V)", convert: toVolts }],
+    "pack voltage (V)"
+  );
 
   if (dataset.spectra.length > 0) {
     renderSpectrumChart(chartSpectrum, dataset.spectra, {
@@ -980,7 +1124,8 @@ buildReportButton.addEventListener("click", () => {
       { title: "Gyro", element: chartGyro },
       { title: "Setpoint vs Gyro", element: chartTracking },
       { title: "Headspeed & Governor", element: chartGovernor },
-      { title: "Motor & Power", element: chartPower }
+      { title: "Throttle", element: chartThrottle },
+      { title: "Battery & Current", element: chartPower }
     ]
   });
 
@@ -1006,8 +1151,8 @@ function strongestSpectrumOf(dataset) {
 
   for (const entry of dataset.spectra) {
     if (
-      Math.max(...entry.spectrum.magnitudes) >
-      Math.max(...strongest.spectrum.magnitudes)
+      spectrumPeakValue(entry.spectrum) >
+      spectrumPeakValue(strongest.spectrum)
     ) {
       strongest = entry;
     }
