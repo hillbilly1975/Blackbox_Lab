@@ -22,8 +22,11 @@ Go to dash.cloudflare.com, sign up (free plan is plenty).
 
 ## Step 3 — Create the worker (the receiving address)
 
-1. Left sidebar: **Workers & Pages** → **Create** → **Worker**.
-2. Name it `blackbox-ingest`, deploy the hello-world it suggests.
+1. Left sidebar: **Workers & Pages** → **Create Application** →
+   stay on the **Workers** tab → **Create Worker** (the plain
+   "Hello World" starter is the right choice if templates appear).
+2. Name it `blackbox-ingest` and **Deploy** the placeholder it
+   suggests — that's expected.
 3. Click **Edit code**, delete everything, and paste the whole
    contents of `Documentation/ingest-worker.js` from this repo.
    Click **Deploy**.
@@ -32,6 +35,8 @@ Go to dash.cloudflare.com, sign up (free plan is plenty).
    bucket: `blackbox-logs`. Save.
 5. The worker's address is shown at the top — something like
    `https://blackbox-ingest.<your-name>.workers.dev`. Copy it.
+   Opening it in a browser should show "Blackbox Lab ingest" —
+   that's how you know it's alive.
 
 ## Step 4 — Tell the app about it
 
