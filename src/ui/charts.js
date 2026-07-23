@@ -47,10 +47,15 @@ function watchResize(element, chart) {
   }
 
   const observer = new ResizeObserver(() => {
-    chart.setSize({
-      width: element.clientWidth,
-      height: chart.height
-    });
+    // A hidden screen reports width 0 — resizing to that
+    // would wipe the chart's pixels (and empty the images
+    // embedded in HTML reports). Keep the last real size.
+    if (element.clientWidth > 0) {
+      chart.setSize({
+        width: element.clientWidth,
+        height: chart.height
+      });
+    }
   });
 
   observer.observe(element);
