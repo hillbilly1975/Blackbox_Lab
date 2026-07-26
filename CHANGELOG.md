@@ -17,6 +17,19 @@
   the removed flight; Clear all history stays for the full wipe.
 - The HTML report now includes the tracking chart for all three
   axes (was roll only).
+- **Governor Lab: "The Worst Droop, In Context"** — the seconds
+  around the biggest dip on one linked clock: target/actual RPM
+  and error, motor output + collective, voltage + current, and
+  the log's own recorded governor P/I/D/F/Sum terms (shown only
+  when genuinely present, never estimated from throttle).
+- **ESC Lab: "Highest-Load Moments"** — the hardest-working
+  seconds with a plain-language cause each (at the limit /
+  battery sag / normal load), a synchronized view of output,
+  current + voltage, power and ESC temperature around the
+  biggest event, and stable-flight averages per governor bank.
+  ESC temperature telemetry is read for the first time.
+- Charts in these views share their zoom — drag on one and the
+  others follow. All scoring is untouched: evidence only.
 
 ### Fixed
 
