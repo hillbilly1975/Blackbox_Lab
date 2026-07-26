@@ -30,6 +30,16 @@
   ESC temperature telemetry is read for the first time.
 - Charts in these views share their zoom — drag on one and the
   others follow. All scoring is untouched: evidence only.
+- **PID Lab: "Tracking By Headspeed Profile"** — per-bank,
+  per-axis tracking error plus an overshoot measure, because
+  helicopters behave differently at different headspeeds.
+- **Filter Lab: "Noise By Headspeed Profile"** — one spectrum
+  per governor bank from that bank's own stable flight time,
+  with peak classification and filter advice at that bank's
+  actual rpm. Rotor harmonics move with headspeed; the combined
+  spectrum can average away a peak that only one bank sees.
+  Both per-profile cards appear when a flight visits two or
+  more banks; scoring is untouched.
 
 ### Fixed
 
