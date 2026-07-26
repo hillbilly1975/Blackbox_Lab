@@ -10,6 +10,7 @@ import {
   windowStats,
   findHighestLoadEvents,
   explainLoadEvent,
+  isCollectiveDriven,
   groupByGovernorTarget
 } from "../src/analysis/evidenceViews.js";
 
@@ -111,4 +112,79 @@ test("groupByGovernorTarget clusters banks and ignores tiny groups", () => {
   assert.equal(banks[0].targetRpm, 1700);
   assert.equal(banks[1].targetRpm, 1900);
   assert.equal(banks[0].indexes.length, 200);
+});
+
+test("isCollectiveDriven needs both near-max and above-typical collective", () => {
+  // Real pitch pump: event peak near flight max, well above median
+  assert.equal(
+    isCollectiveDriven({
+      eventPeakCollective: 650,
+      flightPeakCollective: 700,
+      flightMedianCollective: 250
+    }),
+    true
+  );
+
+  // Steady hover: every moment near the (small) flight max, but
+  // never above typical — must NOT read as a pitch pump
+  assert.equal(
+    isCollectiveDriven({
+      eventPeakCollective: 260,
+      flightPeakCollective: 280,
+      flightMedianCollective: 250
+    }),
+    false
+  );
+
+  // Mild event far from the flight's real maximum
+  assert.equal(
+    isCollectiveDriven({
+      eventPeakCollective: 300,
+      flightPeakCollective: 700,
+      flightMedianCollective: 100
+    }),
+    false
+  );
+
+  assert.equal(
+    isCollectiveDriven({
+      eventPeakCollective: null,
+      flightPeakCollective: 700,
+      flightMedianCollective: 100
+    }),
+    false
+  );
+});
+
+test("collective-load outranks battery-sag and carries Daniel's wording", () => {
+  const withSag = explainLoadEvent({
+    outputPeakPercent: 90,
+    outputSaturatedShare: 0,
+    voltageSagPercent: 12,
+    collectiveDriven: true
+  });
+  assert.equal(withSag.cause, "collective-load");
+  assert.match(withSag.sentence, /hard pitch pump/);
+  assert.match(
+    withSag.sentence,
+    /not necessarily evidence of a weak pack/
+  );
+
+  const withoutSag = explainLoadEvent({
+    outputPeakPercent: 85,
+    outputSaturatedShare: 0,
+    voltageSagPercent: 3,
+    collectiveDriven: true
+  });
+  assert.equal(withoutSag.cause, "collective-load");
+  assert.match(withoutSag.sentence, /voltage holding up well/);
+
+  // Saturation still wins over everything
+  const saturated = explainLoadEvent({
+    outputPeakPercent: 100,
+    outputSaturatedShare: 0.3,
+    voltageSagPercent: 12,
+    collectiveDriven: true
+  });
+  assert.equal(saturated.cause, "headroom-limit");
 });

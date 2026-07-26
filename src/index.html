@@ -32,6 +32,7 @@
         <span class="credit-line">A passion project by</span>
         <span class="credit-name">Daniel Sink</span>
         <span class="credit-sub">free, for the Rotorflight community</span>
+        <span class="sidebar-version" id="sidebarVersion"></span>
       </div>
     </aside>
 
@@ -409,6 +410,17 @@
           <div id="filterAdvisorRecommendations"></div>
         </section>
 
+        <section class="card" id="filterProfileCard" hidden>
+          <h3>Noise By Headspeed Profile</h3>
+          <p class="chart-hint">
+            Rotor harmonics move with rpm — a filter setup that is
+            clean in one bank can sit right on a peak in another.
+            Each bank below gets its own spectrum from its own
+            stable flight time, and its own advice.
+          </p>
+          <div id="filterProfileBlocks"></div>
+        </section>
+
         <section class="card" id="filterLabSection">
           <details class="drilldown">
           <summary>Technical filter analysis — for when you want the numbers</summary>
@@ -447,6 +459,19 @@
         <section class="hero">
           <h2>PID Lab</h2>
           <p>How faithfully your helicopter follows your hands.</p>
+        </section>
+
+        <section class="card" id="pidProfileCard" hidden>
+          <h3>Tracking By Headspeed Profile</h3>
+          <p class="chart-hint">
+            Helicopters behave differently at different headspeeds.
+            Per bank: how closely each axis followed the target, and
+            how often the response overshot what was asked.
+          </p>
+          <div class="table-scroll">
+            <table class="history-table" id="pidProfileTable"></table>
+          </div>
+          <p class="chart-hint" id="pidProfileNote"></p>
         </section>
 
         <section class="card" id="pidLabSection">
@@ -573,6 +598,8 @@
             others follow.
           </p>
           <div class="chart-container" id="chartLoadOutput">
+          </div>
+          <div class="chart-container" id="chartLoadCollective">
           </div>
           <div class="chart-container" id="chartLoadPower">
           </div>

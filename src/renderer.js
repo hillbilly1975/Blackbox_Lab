@@ -50,8 +50,11 @@ import {
   windowStats,
   findHighestLoadEvents,
   explainLoadEvent,
-  groupByGovernorTarget
+  isCollectiveDriven,
+  groupByGovernorTarget,
+  longestConsecutiveRun
 } from "./analysis/evidenceViews.js";
+import { analyzeProfileResponse } from "./analysis/profilePidBreakdown.js";
 import { analyzeEscLab } from "./analysis/escLabAnalysis.js";
 import { analyzeBatteryLab } from "./analysis/batteryLabAnalysis.js";
 //
@@ -137,6 +140,7 @@ const loadEventsCard = el("loadEventsCard");
 const escEventsTable = el("escEventsTable");
 const escEventsStories = el("escEventsStories");
 const chartLoadOutput = el("chartLoadOutput");
+const chartLoadCollective = el("chartLoadCollective");
 const chartLoadPower = el("chartLoadPower");
 const chartLoadWatts = el("chartLoadWatts");
 const chartLoadTemp = el("chartLoadTemp");
@@ -154,6 +158,12 @@ const filterAdvisorCard = el("filterAdvisorCard");
 const filterAdvisorStory = el("filterAdvisorStory");
 const filterAdvisorTable = el("filterAdvisorTable");
 const filterAdvisorRecommendations = el("filterAdvisorRecommendations");
+
+const filterProfileCard = el("filterProfileCard");
+const filterProfileBlocks = el("filterProfileBlocks");
+const pidProfileCard = el("pidProfileCard");
+const pidProfileTable = el("pidProfileTable");
+const pidProfileNote = el("pidProfileNote");
 
 const compareBaselineInfo = el("compareBaselineInfo");
 const compareOpenButton = el("compareOpenButton");
@@ -184,6 +194,9 @@ const advancedModeToggle = el("advancedModeToggle");
 // ======================================================
 
 const navigation = initNavigation();
+
+// One source of truth: the same constant the update check uses.
+el("sidebarVersion").textContent = `v${APP_VERSION}`;
 
 function applyAdvancedMode(enabled) {
   document.body.classList.toggle("advanced-mode", enabled);
@@ -760,6 +773,130 @@ if (
     headspeedRpm: governedHeadspeed
   });
 
+  // ---- filter behavior per headspeed bank ----
+  // Rotor harmonics move with rpm, so each bank gets its own
+  // spectrum and its own advice — computed only from that
+  // bank's longest unbroken stable stretch. Evidence only.
+  const perBankFilter = (() => {
+    const banks = groupByGovernorTarget({
+      governorTarget: alignedGovernorTarget,
+      sampleIndexes: spectrumFlightPhase.stableIndexes ?? []
+    });
+
+    if (banks.length < 2 || !sampleRate) {
+      return [];
+    }
+
+    let strongestAxisIndex = 0;
+    let strongestPeak = 0;
+
+    spectra.forEach((entry, index) => {
+      for (const value of entry.spectrum.magnitudes) {
+        if (value > strongestPeak) {
+          strongestPeak = value;
+          strongestAxisIndex = index;
+        }
+      }
+    });
+
+    const unfilteredName =
+      gyroColumnNames[strongestAxisIndex] ?? gyroColumnNames[0];
+    const filteredName =
+      filteredColumns[strongestAxisIndex] ?? filteredColumns[0];
+
+    const bankWindowSamples = (columnName, startIndex) => {
+      if (!columnName) {
+        return [];
+      }
+
+      const values = alignedColumnValues(columnName).slice(
+        startIndex,
+        startIndex + fftWindowSize
+      );
+
+      return values.length === fftWindowSize &&
+        values.every(Number.isFinite)
+        ? values
+        : [];
+    };
+
+    return banks.map((bank) => {
+      const run = longestConsecutiveRun(bank.indexes);
+
+      if (!run || run.length < fftWindowSize) {
+        return {
+          targetRpm: bank.targetRpm,
+          stableSampleCount: bank.indexes.length,
+          insufficient: true
+        };
+      }
+
+      const windowStart =
+        run.startIndex +
+        Math.floor((run.length - fftWindowSize) / 2);
+
+      const unfilteredSpectrum = computeNoiseSpectrum(
+        bankWindowSamples(unfilteredName, windowStart),
+        sampleRate,
+        { segmentSize: fftWindowSize }
+      );
+
+      if (!unfilteredSpectrum) {
+        return {
+          targetRpm: bank.targetRpm,
+          stableSampleCount: bank.indexes.length,
+          insufficient: true
+        };
+      }
+
+      const filteredSpectrum = hasOwnUnfiltered(headerLine)
+        ? computeNoiseSpectrum(
+            bankWindowSamples(filteredName, windowStart),
+            sampleRate,
+            { segmentSize: fftWindowSize }
+          )
+        : null;
+
+      const bankHeadspeed = windowStats(
+        alignedHeadspeed,
+        windowStart,
+        windowStart + fftWindowSize - 1
+      );
+
+      const bankRpm = bankHeadspeed
+        ? bankHeadspeed.average
+        : bank.targetRpm;
+
+      return {
+        targetRpm: bank.targetRpm,
+        actualRpm: Math.round(bankRpm),
+        stableSampleCount: bank.indexes.length,
+        insufficient: false,
+        spectra: [
+          {
+            label: `${unfilteredName} (raw)`,
+            spectrum: unfilteredSpectrum,
+            color: CHART_COLORS[1]
+          },
+          ...(filteredSpectrum
+            ? [
+                {
+                  label: `${filteredName} (filtered)`,
+                  spectrum: filteredSpectrum,
+                  color: CHART_COLORS[0]
+                }
+              ]
+            : [])
+        ],
+        advice: adviseFilters({
+          unfilteredSpectrum,
+          filteredSpectrum,
+          headspeedRpm: bankRpm
+        })
+      };
+    });
+  })();
+
   // ---- labs + verdict ----
   const labs = {
     governor: analyzeGovernorLab({ timeSeconds, headspeed, governorTarget }),
@@ -832,6 +969,7 @@ if (
     amperage,
     spectra,
     markers,
+    perBankFilter,
     labs,
     verdict
   };
@@ -1353,6 +1491,38 @@ function renderEscEvidence(dataset) {
       : null;
   });
 
+  // Collective demand lets the app prove a pitch-pump load
+  // instead of leaving the pilot to correlate charts by hand.
+  const collectiveColumn =
+    dataset.findColumnsIn([/^setpoint\[3\]$/i])[0] ?? null;
+
+  const collectiveAbs = collectiveColumn
+    ? dataset
+        .columnValues(collectiveColumn)
+        .map((value) =>
+          Number.isFinite(value) ? Math.abs(value) : null
+        )
+    : null;
+
+  const collectiveFlightStats = (() => {
+    if (!collectiveAbs) {
+      return null;
+    }
+
+    const sorted = collectiveAbs
+      .filter(Number.isFinite)
+      .sort((first, second) => first - second);
+
+    if (sorted.length === 0) {
+      return null;
+    }
+
+    return {
+      peak: sorted[sorted.length - 1],
+      median: sorted[Math.floor(sorted.length / 2)]
+    };
+  })();
+
   // An all-zero temperature column means the sensor isn't
   // fitted (e.g. no second ESC) — don't plot a dead line.
   const temperatureEntries = [
@@ -1420,11 +1590,26 @@ function renderEscEvidence(dataset) {
         event.endIndex
       );
 
+      const eventCollective =
+        collectiveAbs && collectiveFlightStats
+          ? windowStats(
+              collectiveAbs,
+              event.startIndex,
+              event.endIndex
+            )
+          : null;
+
       const explanation = explainLoadEvent({
         outputPeakPercent: output?.max ?? null,
         outputSaturatedShare:
           outputCount > 0 ? saturatedCount / outputCount : null,
-        voltageSagPercent: sagPercent
+        voltageSagPercent: sagPercent,
+        collectiveDriven: isCollectiveDriven({
+          eventPeakCollective: eventCollective?.max ?? null,
+          flightPeakCollective: collectiveFlightStats?.peak ?? null,
+          flightMedianCollective:
+            collectiveFlightStats?.median ?? null
+        })
       });
 
       return { event, output, voltage, sagPercent, watts, explanation };
@@ -1453,9 +1638,11 @@ function renderEscEvidence(dataset) {
           <td>${
             explanation.cause === "headroom-limit"
               ? "At the limit"
-              : explanation.cause === "battery-sag"
-                ? "Battery sag"
-                : "Normal load"
+              : explanation.cause === "collective-load"
+                ? "Collective load"
+                : explanation.cause === "battery-sag"
+                  ? "Battery sag"
+                  : "Normal load"
           }</td>
         </tr>`
         )
@@ -1504,6 +1691,24 @@ function renderEscEvidence(dataset) {
         ],
         { yLabel: "output (%)", markers, linkGroup: "loadSync" }
       );
+
+      if (collectiveColumn) {
+        renderSyncedChart(
+          chartLoadCollective,
+          dataset,
+          window,
+          [
+            {
+              patterns: [/^setpoint\[3\]$/i],
+              label: "Collective target",
+              color: CHART_COLORS[5]
+            }
+          ],
+          { yLabel: "collective", markers, linkGroup: "loadSync" }
+        );
+      } else {
+        chartLoadCollective.hidden = true;
+      }
 
       renderSyncedChart(
         chartLoadPower,
@@ -1653,6 +1858,8 @@ function renderAllCharts(dataset) {
     droopContextCard.hidden = true;
     loadEventsCard.hidden = true;
     escProfileCard.hidden = true;
+    pidProfileCard.hidden = true;
+    filterProfileCard.hidden = true;
 
     return;
   }
@@ -1842,6 +2049,178 @@ function renderFilterAdvisor(dataset) {
   });
 }
 
+// ---- per-headspeed-profile breakdowns (PID & Filter Labs) ----
+// Evidence only: the headline results and all scoring stay
+// exactly as they are; these cards break the same flight down
+// by governor bank.
+
+function renderPidProfileBreakdown(pidAnalysis, lines) {
+  const trackingProfiles =
+    pidAnalysis?.detectedColumns?.trackingAnalysis
+      ?.profileTrackingAnalysis ?? [];
+
+  const usableProfiles = trackingProfiles.filter((profile) =>
+    Number.isFinite(profile.averageTrackingError)
+  );
+
+  if (usableProfiles.length < 2) {
+    pidProfileCard.hidden = true;
+    return;
+  }
+
+  const analysisContext = pidAnalysis.analysisContext ?? {};
+
+  // The adapter's header line may quote column names — accept
+  // both, like the PID analysis itself does.
+  const gyroColumns = (analysisContext.telemetry?.allColumns ?? [])
+    .filter((name) =>
+      /^"?gyroADC\[[0-2]\]"?$/i.test(String(name).trim())
+    )
+    .sort();
+
+  const responseProfiles = analyzeProfileResponse({
+    lines,
+    telemetryHeaderIndex:
+      analysisContext.flight?.telemetryHeaderIndex,
+    headspeedProfiles:
+      analysisContext.flight?.headspeedProfiles ?? [],
+    setpointColumns:
+      pidAnalysis.detectedColumns?.axisSetpoint ?? [],
+    gyroColumns
+  });
+
+  const responseByRpm = new Map(
+    responseProfiles.map((profile) => [profile.targetRpm, profile])
+  );
+
+  const numberCell = (value, digits = 1, suffix = "") =>
+    Number.isFinite(value) ? `${value.toFixed(digits)}${suffix}` : "—";
+
+  pidProfileCard.hidden = false;
+  pidProfileTable.innerHTML = `
+    <tr>
+      <th>Bank</th><th>Axis</th><th>Avg tracking error</th>
+      <th>Overshoot rate</th><th>Peak overshoot</th>
+    </tr>
+    ${usableProfiles
+      .map((profile) => {
+        const response = responseByRpm.get(profile.targetRpm);
+
+        return (profile.axisResults ?? [])
+          .map((axisResult, axisIndex) => {
+            const axisResponse = response?.axisResults?.find(
+              (candidate) => candidate.axis === axisResult.axis
+            );
+
+            return `
+        <tr>
+          <td>${axisIndex === 0 ? `${profile.targetRpm} rpm` : ""}</td>
+          <td>${axisResult.axis}</td>
+          <td>${numberCell(axisResult.averageAbsoluteError, 2)}</td>
+          <td>${numberCell(axisResponse?.exceedanceRatePercent, 1, "%")}</td>
+          <td>${numberCell(axisResponse?.peakExceedancePercent, 0, "%")}</td>
+        </tr>`;
+          })
+          .join("");
+      })
+      .join("")}
+  `;
+
+  const best = usableProfiles.reduce((a, b) =>
+    a.averageTrackingError <= b.averageTrackingError ? a : b
+  );
+  const worst = usableProfiles.reduce((a, b) =>
+    a.averageTrackingError >= b.averageTrackingError ? a : b
+  );
+
+  pidProfileNote.textContent =
+    best.targetRpm === worst.targetRpm
+      ? ""
+      : `${best.targetRpm} rpm tracked best overall; ${worst.targetRpm} rpm tracked worst. Overshoot rate = share of commanded samples where the response exceeded the target beyond a small deadband.`;
+}
+
+function renderFilterProfileBreakdown(dataset) {
+  const banks = dataset?.perBankFilter ?? [];
+
+  if (banks.length < 2) {
+    filterProfileCard.hidden = true;
+    return;
+  }
+
+  filterProfileCard.hidden = false;
+  filterProfileBlocks.innerHTML = "";
+
+  for (const bank of banks) {
+    const heading = document.createElement("h4");
+    heading.textContent = bank.insufficient
+      ? `${bank.targetRpm} rpm bank`
+      : `${bank.targetRpm} rpm bank (flown at ~${bank.actualRpm} rpm)`;
+    filterProfileBlocks.appendChild(heading);
+
+    if (bank.insufficient) {
+      const note = document.createElement("p");
+      note.className = "chart-hint";
+      note.textContent =
+        "Not enough continuous stable time at this headspeed for a spectrum — fly a longer steady stretch in this bank to analyze it.";
+      filterProfileBlocks.appendChild(note);
+      continue;
+    }
+
+    const chartElement = document.createElement("div");
+    chartElement.className = "chart-container";
+    filterProfileBlocks.appendChild(chartElement);
+
+    renderSpectrumChart(chartElement, bank.spectra, {
+      height: 220,
+      markers: buildSpectrumMarkers(bank.spectra, bank.actualRpm)
+    });
+
+    const advice = bank.advice;
+
+    if (advice && advice.rows.length > 0) {
+      const table = document.createElement("table");
+      table.className = "history-table";
+      table.innerHTML = `
+        <tr>
+          <th>Peak</th><th>Likely source</th>
+          <th>Peak reduction</th>
+        </tr>
+        ${advice.rows
+          .map(
+            (row) => `
+          <tr>
+            <td>${row.hz} Hz</td>
+            <td>${row.source}</td>
+            <td>${
+              row.reductionPercent !== null
+                ? row.reductionPercent + "%"
+                : "—"
+            }</td>
+          </tr>`
+          )
+          .join("")}
+      `;
+
+      const scroll = document.createElement("div");
+      scroll.className = "table-scroll";
+      scroll.appendChild(table);
+      filterProfileBlocks.appendChild(scroll);
+    }
+
+    for (const recommendation of advice?.recommendations ?? []) {
+      if (recommendation.priority !== "filters") {
+        continue;
+      }
+
+      const item = document.createElement("div");
+      item.className =
+        "advisor-recommendation priority-filters";
+      item.innerHTML = `<span>Filters:</span> ${recommendation.text}`;
+      filterProfileBlocks.appendChild(item);
+    }
+  }
+}
+
 // ======================================================
 // 06. ANALYSIS + SCREEN UPDATE
 // ======================================================
@@ -1902,6 +2281,8 @@ function analyzeFlight(flightIndex) {
   renderQuality(currentDataset, flight.stats);
   renderFilterAdvisor(currentDataset);
   renderAllCharts(currentDataset);
+  renderPidProfileBreakdown(pidAnalysis, lines);
+  renderFilterProfileBreakdown(currentDataset);
 
   renderLab(
     currentDataset?.labs.governor,
