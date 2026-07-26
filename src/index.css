@@ -662,6 +662,42 @@ body.advanced-mode details.advanced-block {
   display: none;
 }
 
+/* ---------------- load progress dialog ---------------- */
+
+.load-dialog {
+  text-align: center;
+  max-width: 380px;
+}
+
+.load-dialog .button-row {
+  justify-content: center;
+}
+
+.load-spinner {
+  width: 34px;
+  height: 34px;
+  margin: 0 auto 14px auto;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  animation: load-spinner-turn 0.9s linear infinite;
+}
+
+.load-spinner[hidden] {
+  display: none;
+}
+
+@keyframes load-spinner-turn {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .load-spinner {
+    animation-duration: 2.5s;
+  }
+}
+
 .overlay-dialog {
   width: min(520px, 92vw);
   background: var(--card);

@@ -277,15 +277,80 @@ openLogLock.addEventListener("click", (event) => {
 
 let loadedLog = null;
 
+// ---- load progress overlay ----
+// The inline status lives on Home. A log opened from any other
+// screen (sidebar button, drag & drop) would load invisibly and
+// feel like a hang — so those loads get a small progress dialog,
+// which ends by asking: jump to the overview, or stay here?
+const loadProgress = el("loadProgress");
+const loadProgressTitle = el("loadProgressTitle");
+const loadProgressText = el("loadProgressText");
+const loadProgressActions = el("loadProgressActions");
+const loadSpinner = el("loadSpinner");
+const loadGoOverview = el("loadGoOverview");
+const loadStayHere = el("loadStayHere");
+
+function currentScreenName() {
+  return (
+    document.querySelector("[data-screen].screen-active")?.dataset
+      .screen ?? "home"
+  );
+}
+
+function beginLoadProgress() {
+  if (currentScreenName() === "home") {
+    return;
+  }
+
+  loadProgressTitle.textContent = "Reading your flight…";
+  loadProgressText.textContent = "";
+  loadSpinner.hidden = false;
+  loadProgressActions.hidden = true;
+  loadProgress.hidden = false;
+}
+
+function setLoadStatus(text) {
+  fileStatus.textContent = text;
+
+  if (!loadProgress.hidden) {
+    loadProgressText.textContent = text;
+  }
+}
+
+function finishLoadProgress(succeeded) {
+  if (loadProgress.hidden) {
+    return;
+  }
+
+  loadProgressTitle.textContent = succeeded
+    ? "Flight analyzed"
+    : "Could not read this log";
+  loadSpinner.hidden = true;
+  loadProgressActions.hidden = false;
+}
+
+loadGoOverview.addEventListener("click", () => {
+  loadProgress.hidden = true;
+  navigation.showScreen("home");
+  document.querySelector(".workspace").scrollTop = 0;
+});
+
+loadStayHere.addEventListener("click", () => {
+  loadProgress.hidden = true;
+});
+
 async function loadFromFile(file) {
-  fileStatus.textContent = `Reading ${file.name}...`;
+  beginLoadProgress();
+  setLoadStatus(`Reading ${file.name}...`);
   await new Promise((resolve) => setTimeout(resolve, 30));
 
   const logData = await readLogFile(file);
 
   if (!logData || logData.flights.length === 0) {
-    fileStatus.textContent =
-      "Could not read any flight data from this file.";
+    setLoadStatus(
+      "Could not read any flight data from this file."
+    );
+    finishLoadProgress(false);
     return;
   }
 
@@ -308,14 +373,20 @@ async function loadFromFile(file) {
 
   flightPicker.hidden = logData.flights.length < 2;
 
-  fileStatus.textContent =
-    "Analyzing flight... (big logs take a few seconds)";
+  setLoadStatus(
+    "Analyzing flight... (big logs take a few seconds)"
+  );
   await new Promise((resolve) => setTimeout(resolve, 30));
 
   analyzeFlight(0);
 
   // Swap the welcome hero for the working Home layout.
   document.body.classList.add("log-loaded");
+
+  if (!loadProgress.hidden) {
+    loadProgressText.textContent = `${file.name} analyzed — the verdict is ready on the overview.`;
+  }
+  finishLoadProgress(true);
 }
 
 logFileInput.addEventListener("change", async () => {
@@ -323,8 +394,10 @@ logFileInput.addEventListener("change", async () => {
     try {
       await loadFromFile(logFileInput.files[0]);
     } catch (error) {
-      fileStatus.textContent =
-        "Something went wrong reading this log: " + error.message;
+      setLoadStatus(
+        "Something went wrong reading this log: " + error.message
+      );
+      finishLoadProgress(false);
     }
   }
 
@@ -2351,9 +2424,13 @@ function analyzeFlight(flightIndex) {
     }
   }
 
-  // Land the pilot on the answers, not the data.
-  navigation.showScreen("home");
-  document.querySelector(".workspace").scrollTop = 0;
+  // Land the pilot on the answers, not the data — unless the
+  // load-progress dialog is up: then the jump is the pilot's
+  // choice ("Go to the overview" vs "Stay on this page").
+  if (loadProgress.hidden) {
+    navigation.showScreen("home");
+    document.querySelector(".workspace").scrollTop = 0;
+  }
 }
 
 // ======================================================
@@ -2890,8 +2967,10 @@ window.addEventListener("drop", async (event) => {
   try {
     await loadFromFile(file);
   } catch (error) {
-    fileStatus.textContent =
-      "Something went wrong reading this log: " + error.message;
+    setLoadStatus(
+      "Something went wrong reading this log: " + error.message
+    );
+    finishLoadProgress(false);
   }
 });
 

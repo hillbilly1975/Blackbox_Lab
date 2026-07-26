@@ -107,6 +107,23 @@ const { mkdirSync } = require("node:fs");
   console.log("compare rows:", compareRowCount, "| summary:", compareSummary);
   await window.screenshot({ path: "smoke-shots/08-compare.png" });
 
+  // ---- load-from-another-screen: progress dialog ----
+  await window.click('.nav-button[data-target="viewer"]');
+  await window.waitForTimeout(300);
+  await window.setInputFiles("#logFileInput", "samples/sample-clean-tuned.bbl");
+  await window.waitForSelector("#loadProgress:not([hidden])", { timeout: 5000 });
+  await window.waitForSelector("#loadProgressActions:not([hidden])", { timeout: 30000 });
+  const loadTitle = await window.textContent("#loadProgressTitle");
+  await window.click("#loadStayHere");
+  const overlayState = await window.evaluate(() => ({
+    overlayHidden: document.getElementById("loadProgress").hidden,
+    screen: document.querySelector("[data-screen].screen-active")?.dataset.screen
+  }));
+  if (!overlayState.overlayHidden || overlayState.screen !== "viewer") {
+    throw new Error("load progress dialog misbehaved: " + JSON.stringify(overlayState));
+  }
+  console.log("load progress dialog ok:", loadTitle, "| stayed on:", overlayState.screen);
+
   // ---- health record ----
   await window.click('.nav-button[data-target="history"]');
   await window.waitForTimeout(450);
