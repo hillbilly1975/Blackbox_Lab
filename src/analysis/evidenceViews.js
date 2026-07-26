@@ -250,6 +250,36 @@ export function explainLoadEvent({
   };
 }
 
+// Longest run of consecutive integers in an ascending index
+// list — the FFT needs continuous samples, so a bank's stable
+// time only counts where it is unbroken.
+export function longestConsecutiveRun(indexes) {
+  if (!Array.isArray(indexes) || indexes.length === 0) {
+    return null;
+  }
+
+  let bestStart = indexes[0];
+  let bestLength = 1;
+  let runStart = indexes[0];
+  let runLength = 1;
+
+  for (let i = 1; i < indexes.length; i += 1) {
+    if (indexes[i] === indexes[i - 1] + 1) {
+      runLength += 1;
+    } else {
+      runStart = indexes[i];
+      runLength = 1;
+    }
+
+    if (runLength > bestLength) {
+      bestLength = runLength;
+      bestStart = runStart;
+    }
+  }
+
+  return { startIndex: bestStart, length: bestLength };
+}
+
 // Group stable-flight samples by governor target so
 // averages can be reported per headspeed profile (bank).
 // Targets within one percent of each other belong to the
