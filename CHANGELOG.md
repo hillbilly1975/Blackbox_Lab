@@ -1,4 +1,29 @@
-## Unreleased
+## v0.3.4 — feedforward doctrine + release repair
+
+Builds directly on v0.3.3's scoring cleanup.
+
+### Fixed
+
+- Sustained feedforward output is no longer scored as PID-term
+  saturation. In Rotorflight, feedforward is supposed to do the
+  work during commanded motion, so sustained feedforward drive is
+  now reported as expected behavior (informational, no score
+  deduction). The v0.3.3 command-balance assessment remains the
+  feedforward health signal and the verdict text now points at it.
+- `src/version.js` now matches `package.json` again — v0.3.3
+  installs showed a permanent "update available" banner. A new
+  test keeps the two versions in lockstep from now on.
+- v0.3.3's release tag was missing the `v` prefix, so the
+  installer build never ran and its release page has no downloads.
+  v0.3.4 (tagged `v0.3.4`) is the first downloadable build that
+  carries all of the v0.3.3 fixes.
+
+### Added
+
+- Feedforward doctrine tests and the version lockstep test
+  (suite: 49 tests).
+
+## v0.3.3 — evidence and scoring cleanup
 
 ### Fixed
 
