@@ -57,6 +57,27 @@ function groupPidColumns(pidColumns) {
   return groups;
 }
 
+// Rotorflight doctrine: feedforward is supposed to carry the
+// work during commanded motion, so sustained near-peak
+// feedforward drive is expected behavior, never a fault. The
+// command-balance assessment is the feedforward health signal.
+export function applyFeedforwardDoctrine(
+  saturationAssessment
+) {
+  if (
+    saturationAssessment?.status !== "Review"
+  ) {
+    return saturationAssessment;
+  }
+
+  return {
+    ...saturationAssessment,
+    status: "Expected",
+    recommendation:
+      "Feedforward held near-maximum output for sustained periods. In Rotorflight, feedforward is supposed to do most of the work during commanded motion, so sustained feedforward drive is expected behavior and does not reduce the score. If this axis tracks poorly, review the command-balance result and gyro evidence instead of lowering feedforward."
+  };
+}
+
 export function analyzePids(
   analysisContext,
   lines = [],
@@ -1330,8 +1351,10 @@ const pidTermSaturationAssessment = {
     pidTermNearPeakActivity.feedforward.map(
       (termResult) => ({
         ...termResult,
-        ...classifyPidTermSaturation(
-          termResult
+        ...applyFeedforwardDoctrine(
+          classifyPidTermSaturation(
+            termResult
+          )
         )
       })
     )
@@ -1729,8 +1752,7 @@ const confidenceLevel =
  const saturationReviewTerms = [
   ...pidTermSaturationAssessment.p,
   ...pidTermSaturationAssessment.i,
-  ...pidTermSaturationAssessment.d,
-  ...pidTermSaturationAssessment.feedforward
+  ...pidTermSaturationAssessment.d
 ].filter(
   (termResult) =>
     termResult.status === "Review"
@@ -2752,7 +2774,7 @@ worstTrackingProfile
       ?.confidence ?? "Low"
   } confidence`,
 
-  `${axis} Feedforward saturation status: ${
+  `${axis} Feedforward sustained-drive status: ${
     pidTermSaturationAssessment.feedforward[
       axisIndex
     ]?.status ?? "Insufficient Data"
@@ -2774,8 +2796,7 @@ worstTrackingProfile
       ...[
   ...pidTermSaturationAssessment.p,
   ...pidTermSaturationAssessment.i,
-  ...pidTermSaturationAssessment.d,
-  ...pidTermSaturationAssessment.feedforward
+  ...pidTermSaturationAssessment.d
 ]
   .filter(
     (termResult) =>
@@ -2790,6 +2811,15 @@ worstTrackingProfile
       }% with a longest run of ${
         termResult.longestNearPeakRun ?? 0
       } samples. Compare this with command activity, tracking error, and the matching axis response before changing PID values.`
+  ),
+      ...pidTermSaturationAssessment.feedforward
+  .filter(
+    (termResult) =>
+      termResult.status === "Expected"
+  )
+  .map(
+    (termResult) =>
+      `${termResult.axis} ${termResult.columnName} held near-maximum output for sustained periods. In Rotorflight this is feedforward doing its intended work and it does not reduce the score. If ${termResult.axis} tracking is poor, review the command-balance result instead of lowering feedforward.`
   ),
       ...pidCommandBalanceAssessment
   .filter(
