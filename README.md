@@ -116,7 +116,8 @@ npm test         # run the test suite
 ```
 
 Then click "Open Blackbox Log" and pick a `.bbl`, `.csv` or CLI
-dump — or try `samples/sample-vibration-problem.bbl` and visit
+dump — or try `samples/sample-bell-222ut.bbl` (a real
+recorded flight) and visit
 the Filter Lab.
 
 ## Status

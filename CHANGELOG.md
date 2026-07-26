@@ -46,6 +46,11 @@
   reading becomes "Collective load" — the sag was a response to
   the load, not necessarily evidence of a weak pack.
 - The sidebar now shows the app version.
+- **The sample flight is now a real flight**: "Try a Sample
+  Flight" loads a genuine recorded log with three headspeed
+  banks and full ESC + governor telemetry, so the tour shows
+  every card in the app — including the per-profile views.
+  Bundled samples are never sent to the community bucket.
 
 ### Fixed
 

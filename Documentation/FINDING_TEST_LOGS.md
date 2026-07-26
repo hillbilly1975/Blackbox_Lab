@@ -11,6 +11,9 @@ describing exactly what is in them (vibration frequencies,
 governor behavior, tune quality):
 
 - `sample-clean-tuned.bbl` — a healthy, well-tuned machine
+- `sample-bell-222ut.bbl` — a real recorded flight (three
+  headspeed banks, full ESC + governor telemetry) — this is the
+  one the "Try a Sample Flight" button loads
 - `sample-vibration-problem.bbl` — strong 1/rev + tail resonance
 - `sample-governor-sag.bbl` — headspeed droops under load
 

@@ -342,7 +342,7 @@ trySampleButton.addEventListener("click", async () => {
   fileStatus.textContent = "Loading sample flight...";
 
   const bytes = await window.blackboxLab.readSampleLog(
-    "sample-vibration-problem.bbl"
+    "sample-bell-222ut.bbl"
   );
 
   if (!bytes) {
@@ -352,7 +352,7 @@ trySampleButton.addEventListener("click", async () => {
 
   const file = new File(
     [new Uint8Array(bytes)],
-    "sample-vibration-problem.bbl"
+    "sample-bell-222ut.bbl"
   );
 
   await loadFromFile(file);
@@ -2343,7 +2343,12 @@ function analyzeFlight(flightIndex) {
 
   // ---- community data sharing (opt-in, anonymized) ----
   if (flight.mainFrames) {
-    maybeContributeFlight(flight, fileType, `${file.name}#${flightIndex}`);
+    // Bundled sample flights are shipped data — everyone has
+    // them, so contributing them would only fill the community
+    // bucket with identical copies.
+    if (!file.name.startsWith("sample-")) {
+      maybeContributeFlight(flight, fileType, `${file.name}#${flightIndex}`);
+    }
   }
 
   // Land the pilot on the answers, not the data.
