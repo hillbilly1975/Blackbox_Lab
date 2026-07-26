@@ -41,6 +41,7 @@ import {
   recordFlight,
   buildHistoryEntry,
   assessTrends,
+  deleteFlight,
   clearHistory
 } from "./analysis/craftHistory.js";
 import { analyzeGovernorLab } from "./analysis/governorLabAnalysis.js";
@@ -1662,11 +1663,11 @@ function refreshHistoryScreen(selectedCraft) {
   historyTable.innerHTML = `
     <tr>
       <th>Date</th><th>Log</th><th>Length</th><th>Vibration</th>
-      <th>Droop</th><th>Tracking</th><th>Sag</th><th>IR est.</th>
+      <th>Droop</th><th>Tracking</th><th>Sag</th><th>IR est.</th><th></th>
     </tr>
     ${entries
       .map(
-        (entry) => `
+        (entry, index) => `
       <tr>
         <td>${new Date(entry.flightDateMs).toLocaleDateString()}</td>
         <td>${entry.fileName}</td>
@@ -1676,11 +1677,42 @@ function refreshHistoryScreen(selectedCraft) {
         <td>${cell(entry.trackingScore, "/100")}</td>
         <td>${cell(entry.batterySagPercent, "%")}</td>
         <td>${cell(entry.internalResistance, " mΩ")}</td>
+        <td><button class="history-remove" data-index="${index}"
+          title="Remove this flight from the record">✕</button></td>
       </tr>`
       )
       .join("")}
   `;
 }
+
+// The table is rebuilt on every refresh, so one delegated
+// listener outlives all the rows it serves. Rows are looked up
+// by index at click time — the table and storage can't drift
+// apart because every write triggers a refresh.
+historyTable.addEventListener("click", (event) => {
+  const button = event.target.closest(".history-remove");
+
+  if (!button) {
+    return;
+  }
+
+  const craft = historyCraftSelect.value;
+  const entries = loadHistory(localStorage)[craft] ?? [];
+  const entry = entries[Number(button.dataset.index)];
+
+  if (!entry) {
+    return;
+  }
+
+  if (
+    confirm(
+      `Remove "${entry.fileName}" from the health record? Trends recompute without it.`
+    )
+  ) {
+    deleteFlight(localStorage, craft, entry.fileName);
+    refreshHistoryScreen(craft);
+  }
+});
 
 historyCraftSelect.addEventListener("change", () => {
   refreshHistoryScreen(historyCraftSelect.value);
