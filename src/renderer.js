@@ -98,6 +98,14 @@ const pidAnalysisRecommendations = el("pidAnalysisRecommendations");
 const chartGyro = el("chartGyro");
 const chartThrottle = el("chartThrottle");
 const chartTracking = el("chartTracking");
+const chartTrackingPitch = el("chartTrackingPitch");
+const chartTrackingYaw = el("chartTrackingYaw");
+const chartFfRoll = el("chartFfRoll");
+const chartFfPitch = el("chartFfPitch");
+const chartFfYaw = el("chartFfYaw");
+const chartTermsRoll = el("chartTermsRoll");
+const chartTermsPitch = el("chartTermsPitch");
+const chartTermsYaw = el("chartTermsYaw");
 const chartHeadspeed = el("chartHeadspeed");
 const chartPower = el("chartPower");
 const chartSpectrum = el("chartSpectrum");
@@ -1051,10 +1059,80 @@ function renderScaledChart(element, dataset, entries, yLabel) {
   });
 }
 
+// ---- Ben's preset grid: per axis, three opinionated charts ----
+// Tracking (setpoint + gyro), FF check (+ I-term: I ≈ 0 during a
+// followed command = feedforward carrying the work), term balance
+// (setpoint anchors P/I/D activity to pilot input). Colors stay
+// per-role across all nine charts so the eye can jump between them.
+const PRESET_COLORS = {
+  setpoint: CHART_COLORS[0], // blue — the target
+  gyro: CHART_COLORS[1], // orange — the response
+  i: CHART_COLORS[2], // green — I-term
+  p: CHART_COLORS[3], // amber — P-term
+  d: CHART_COLORS[4] // magenta — D-term
+};
+
+function renderPresetChart(element, dataset, entries, yLabel) {
+  const series = [];
+
+  for (const entry of entries) {
+    const column = dataset.findColumnsIn(entry.patterns)[0];
+
+    if (column) {
+      series.push({
+        label: column,
+        values: decimate(dataset.columnValues(column)),
+        color: entry.color
+      });
+    }
+  }
+
+  // One lonely line can't show a relationship — every preset
+  // compares traces, so ask for at least two.
+  if (series.length < 2) {
+    element.innerHTML =
+      '<p class="chart-empty">This log has no data for this chart.</p>';
+    return;
+  }
+
+  renderTimeSeriesChart(element, {
+    timeSeconds: decimate(dataset.timeSeconds),
+    series,
+    yLabel,
+    height: 220
+  });
+}
+
+function renderTuningPresets(dataset) {
+  const axes = [
+    { index: 0, tracking: chartTracking, ff: chartFfRoll, terms: chartTermsRoll },
+    { index: 1, tracking: chartTrackingPitch, ff: chartFfPitch, terms: chartTermsPitch },
+    { index: 2, tracking: chartTrackingYaw, ff: chartFfYaw, terms: chartTermsYaw }
+  ];
+
+  for (const axis of axes) {
+    const column = (base) =>
+      new RegExp(`^${base}\\[${axis.index}\\]$`, "i");
+
+    const setpoint = { patterns: [column("setpoint")], color: PRESET_COLORS.setpoint };
+    const gyro = { patterns: [column("gyroADC")], color: PRESET_COLORS.gyro };
+    const iTerm = { patterns: [column("axisI")], color: PRESET_COLORS.i };
+    const pTerm = { patterns: [column("axisP")], color: PRESET_COLORS.p };
+    const dTerm = { patterns: [column("axisD")], color: PRESET_COLORS.d };
+
+    renderPresetChart(axis.tracking, dataset, [setpoint, gyro], "deg/s");
+    renderPresetChart(axis.ff, dataset, [setpoint, gyro, iTerm], "deg/s · term output");
+    renderPresetChart(axis.terms, dataset, [setpoint, pTerm, iTerm, dTerm], "deg/s · term output");
+  }
+}
+
 function renderAllCharts(dataset) {
   if (!dataset) {
     for (const element of [
-      chartGyro, chartTracking, chartHeadspeed, chartThrottle, chartPower,
+      chartGyro, chartTracking, chartTrackingPitch, chartTrackingYaw,
+      chartFfRoll, chartFfPitch, chartFfYaw,
+      chartTermsRoll, chartTermsPitch, chartTermsYaw,
+      chartHeadspeed, chartThrottle, chartPower,
       chartSpectrum, chartGovernor, chartEsc, chartBattery
     ]) {
       element.innerHTML =
@@ -1068,12 +1146,7 @@ function renderAllCharts(dataset) {
     yLabel: "deg/s"
   });
 
-  renderSeriesChart(
-    chartTracking,
-    dataset,
-    [/^setpoint\[0\]/i, /^gyroADC\[0\]/i],
-    { yLabel: "roll axis" }
-  );
+  renderTuningPresets(dataset);
 
   renderSeriesChart(
     chartHeadspeed,
@@ -1407,7 +1480,9 @@ buildReportButton.addEventListener("click", () => {
     chartElements: [
       { title: "Noise Spectrum", element: chartSpectrum },
       { title: "Gyro", element: chartGyro },
-      { title: "Setpoint vs Gyro", element: chartTracking },
+      { title: "Roll: Target vs Gyro", element: chartTracking },
+      { title: "Pitch: Target vs Gyro", element: chartTrackingPitch },
+      { title: "Yaw: Target vs Gyro", element: chartTrackingYaw },
       { title: "Headspeed & Governor", element: chartGovernor },
       { title: "Throttle", element: chartThrottle },
       { title: "Battery & Current", element: chartPower }

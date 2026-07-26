@@ -274,7 +274,7 @@
         </section>
 
         <section class="card">
-          <h3>Setpoint vs Gyro</h3>
+          <h3>Roll Tuning</h3>
           <p class="chart-hint">
             What you asked for versus what you got — the heart of tuning.
             The closer the lines hug, the better the tune.
@@ -282,6 +282,70 @@
           <div class="chart-container" id="chartTracking">
             <p class="chart-empty">Open a log to see this chart.</p>
           </div>
+          <details class="advanced-block" open>
+            <summary>Advanced: feedforward &amp; term balance</summary>
+            <p class="chart-hint">
+              Feedforward check — if the gyro follows the target while
+              the I-term stays near zero, feedforward is carrying the
+              maneuver, exactly as Rotorflight intends.
+            </p>
+            <div class="chart-container" id="chartFfRoll">
+              <p class="chart-empty">Open a log to see this chart.</p>
+            </div>
+            <p class="chart-hint">
+              Term balance — which controller term is doing the work.
+              Watch for I wind-up, D-term buzz, and whether term
+              activity lines up with your commands.
+            </p>
+            <div class="chart-container" id="chartTermsRoll">
+              <p class="chart-empty">Open a log to see this chart.</p>
+            </div>
+          </details>
+        </section>
+
+        <section class="card">
+          <h3>Pitch Tuning</h3>
+          <p class="chart-hint">
+            Target versus response on the pitch axis.
+          </p>
+          <div class="chart-container" id="chartTrackingPitch">
+            <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+          <details class="advanced-block" open>
+            <summary>Advanced: feedforward &amp; term balance</summary>
+            <p class="chart-hint">
+              Feedforward check and term balance, pitch axis.
+            </p>
+            <div class="chart-container" id="chartFfPitch">
+              <p class="chart-empty">Open a log to see this chart.</p>
+            </div>
+            <div class="chart-container" id="chartTermsPitch">
+              <p class="chart-empty">Open a log to see this chart.</p>
+            </div>
+          </details>
+        </section>
+
+        <section class="card">
+          <h3>Yaw Tuning</h3>
+          <p class="chart-hint">
+            Target versus response on the tail — the axis that shows
+            mechanical and tune problems first.
+          </p>
+          <div class="chart-container" id="chartTrackingYaw">
+            <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+          <details class="advanced-block" open>
+            <summary>Advanced: feedforward &amp; term balance</summary>
+            <p class="chart-hint">
+              Feedforward check and term balance, yaw axis.
+            </p>
+            <div class="chart-container" id="chartFfYaw">
+              <p class="chart-empty">Open a log to see this chart.</p>
+            </div>
+            <div class="chart-container" id="chartTermsYaw">
+              <p class="chart-empty">Open a log to see this chart.</p>
+            </div>
+          </details>
         </section>
 
         <section class="card">
