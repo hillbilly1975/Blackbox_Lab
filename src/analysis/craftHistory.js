@@ -150,6 +150,32 @@ if (craftKey === "Unknown craft") {
   return craftKey;
 }
 
+export function deleteFlight(storage, craftName, fileName) {
+  const history = loadHistory(storage);
+  const flights = history[craftName];
+
+  if (!Array.isArray(flights)) {
+    return false;
+  }
+
+  const remaining = flights.filter(
+    (flight) => flight.fileName !== fileName
+  );
+
+  if (remaining.length === flights.length) {
+    return false;
+  }
+
+  if (remaining.length === 0) {
+    delete history[craftName];
+  } else {
+    history[craftName] = remaining;
+  }
+
+  saveHistory(storage, history);
+  return true;
+}
+
 export function clearHistory(storage) {
   storage.removeItem(STORAGE_KEY);
 }

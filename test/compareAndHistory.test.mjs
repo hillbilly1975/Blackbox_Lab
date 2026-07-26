@@ -10,7 +10,8 @@ import {
   recordFlight,
   loadHistory,
   buildHistoryEntry,
-  assessTrends
+  assessTrends,
+  deleteFlight
 } from "../src/analysis/craftHistory.js";
 
 function fakeSpectrum(peakHz, magnitude) {
@@ -199,4 +200,64 @@ test("filter advisor classifies rotor-linked peaks and measures attenuation", ()
   const filters = advice.recommendations.filter((r) => r.priority === "filters");
   assert.ok(filters.some((r) => /RPM filter/.test(r.text)));
   assert.ok(filters.some((r) => /138 Hz/.test(r.text)));
+});
+
+test("deleteFlight removes a single flight and keeps the rest", () => {
+  const storage = memoryStorage();
+
+  const entry = (name, dateMs) =>
+    buildHistoryEntry({
+      fileName: name,
+      flightDateMs: dateMs,
+      durationSeconds: 100,
+      dataset: fakeDataset({ peakHz: 30, peakMagnitude: 5, droopRpm: 10 })
+    });
+
+  recordFlight(storage, "Test Heli", entry("a.bbl", 1000));
+  recordFlight(storage, "Test Heli", entry("b.bbl", 2000));
+
+  assert.equal(deleteFlight(storage, "Test Heli", "a.bbl"), true);
+
+  const history = loadHistory(storage);
+  assert.equal(history["Test Heli"].length, 1);
+  assert.equal(history["Test Heli"][0].fileName, "b.bbl");
+});
+
+test("deleting the last flight removes the craft entirely", () => {
+  const storage = memoryStorage();
+
+  recordFlight(
+    storage,
+    "Solo Heli",
+    buildHistoryEntry({
+      fileName: "only.bbl",
+      flightDateMs: 1000,
+      durationSeconds: 100,
+      dataset: fakeDataset({ peakHz: 30, peakMagnitude: 5, droopRpm: 10 })
+    })
+  );
+
+  assert.equal(deleteFlight(storage, "Solo Heli", "only.bbl"), true);
+  assert.deepEqual(loadHistory(storage), {});
+});
+
+test("deleteFlight leaves storage untouched on unknown craft or file", () => {
+  const storage = memoryStorage();
+
+  recordFlight(
+    storage,
+    "Test Heli",
+    buildHistoryEntry({
+      fileName: "a.bbl",
+      flightDateMs: 1000,
+      durationSeconds: 100,
+      dataset: fakeDataset({ peakHz: 30, peakMagnitude: 5, droopRpm: 10 })
+    })
+  );
+
+  const before = JSON.stringify(loadHistory(storage));
+
+  assert.equal(deleteFlight(storage, "No Such Heli", "a.bbl"), false);
+  assert.equal(deleteFlight(storage, "Test Heli", "no-such.bbl"), false);
+  assert.equal(JSON.stringify(loadHistory(storage)), before);
 });
