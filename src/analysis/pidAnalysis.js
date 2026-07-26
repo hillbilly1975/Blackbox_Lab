@@ -2075,15 +2075,30 @@ return [
       : "Unavailable"
   }%`,
 
-  `${axisResult.axis} raw maximum event overshoot: ${
-    Number.isFinite(maximumOvershootPercent)
-      ? maximumOvershootPercent.toFixed(2)
-      : "Unavailable"
-  }%`
-,
+  
 
 highestOvershootEvent
-  ? `${axisResult.axis} highest overshoot event details — sample: ${highestOvershootEvent.sampleIndex}, command end: ${highestOvershootEvent.commandEndSampleIndex}, previous setpoint: ${highestOvershootEvent.previousSetpoint.toFixed(2)}, target: ${highestOvershootEvent.commandTarget.toFixed(2)}, command magnitude: ${highestOvershootEvent.commandMagnitude.toFixed(2)}, response peak: ${highestOvershootEvent.responsePeak.toFixed(2)}, overshoot: ${highestOvershootEvent.overshootPercent.toFixed(2)}%`
+  ? `${axisResult.axis} highest overshoot event details — sample: ${
+      highestOvershootEvent.sample ?? "Unavailable"
+    }, command end: ${
+      highestOvershootEvent.commandEnd ?? "Unavailable"
+    }, previous setpoint: ${
+      Number.isFinite(highestOvershootEvent.previousSetpoint)
+        ? highestOvershootEvent.previousSetpoint.toFixed(2)
+        : "Unavailable"
+    }, target: ${
+      Number.isFinite(highestOvershootEvent.target)
+        ? highestOvershootEvent.target.toFixed(2)
+        : "Unavailable"
+    }, command magnitude: ${
+      Number.isFinite(highestOvershootEvent.commandMagnitude)
+        ? highestOvershootEvent.commandMagnitude.toFixed(2)
+        : "Unavailable"
+    }, response peak: ${
+      Number.isFinite(highestOvershootEvent.responsePeak)
+        ? highestOvershootEvent.responsePeak.toFixed(2)
+        : "Unavailable"
+    }`
   : `${axisResult.axis} highest overshoot event details: Unavailable`
 ];
 }),
