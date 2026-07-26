@@ -40,6 +40,12 @@
   spectrum can average away a peak that only one bank sees.
   Both per-profile cards appear when a flight visits two or
   more banks; scoring is untouched.
+- **ESC load events understand collective**: the synchronized
+  event view now includes the collective trace, and when an
+  event's collective demand nears the flight's own maximum the
+  reading becomes "Collective load" — the sag was a response to
+  the load, not necessarily evidence of a weak pack.
+- The sidebar now shows the app version.
 
 ### Fixed
 
