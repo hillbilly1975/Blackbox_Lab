@@ -34,6 +34,15 @@ const AXIS_STYLE = {
 
 function destroyExistingChart(element) {
   if (element.__blackboxLabChart) {
+    const group = element.__blackboxLabLinkGroup
+      ? linkGroups.get(element.__blackboxLabLinkGroup)
+      : null;
+
+    if (group) {
+      group.delete(element.__blackboxLabChart);
+      element.__blackboxLabLinkGroup = null;
+    }
+
     element.__blackboxLabChart.destroy();
     element.__blackboxLabChart = null;
   }
@@ -91,8 +100,21 @@ export function friendlySeriesLabel(name) {
 const WHOLE_NAME_LABELS = {
   headspeed: "Headspeed",
   govTarget: "Governor target",
+  governorTarget: "Governor target",
   vbatLatest: "Pack voltage",
-  Vbat: "Pack voltage"
+  Vbat: "Pack voltage",
+  Ibat: "Pack current",
+  govP: "Governor P",
+  govI: "Governor I",
+  govD: "Governor D",
+  govF: "Governor FF",
+  govSum: "Governor sum",
+  EscV: "ESC voltage",
+  EscI: "ESC current",
+  EscThr: "ESC throttle",
+  Tesc: "ESC temp",
+  Tesc2: "ESC temp 2",
+  Tmcu: "MCU temp"
 };
 
 export function friendlyLabel(name) {
@@ -177,6 +199,44 @@ function buildChartFooter(element, chart, seriesMeta, { withStats }) {
   refresh();
 }
 
+// Charts in the same link group share their x-axis window:
+// zooming one zooms the others. Used by the synchronized
+// evidence views (worst droop, highest load).
+const linkGroups = new Map();
+let broadcastingLinkGroup = false;
+
+function joinLinkGroup(groupName, chart, element) {
+  if (!linkGroups.has(groupName)) {
+    linkGroups.set(groupName, new Set());
+  }
+
+  const group = linkGroups.get(groupName);
+  group.add(chart);
+  element.__blackboxLabLinkGroup = groupName;
+
+  chart.hooks.setScale = chart.hooks.setScale || [];
+  chart.hooks.setScale.push((u, key) => {
+    if (key !== "x" || broadcastingLinkGroup) {
+      return;
+    }
+
+    broadcastingLinkGroup = true;
+
+    try {
+      for (const sibling of group) {
+        if (sibling !== u) {
+          sibling.setScale("x", {
+            min: u.scales.x.min,
+            max: u.scales.x.max
+          });
+        }
+      }
+    } finally {
+      broadcastingLinkGroup = false;
+    }
+  });
+}
+
 export function renderTimeSeriesChart(element, options) {
   const {
     timeSeconds,
@@ -184,7 +244,8 @@ export function renderTimeSeriesChart(element, options) {
     height = 260,
     yLabel = "",
     xLabel = "Flight time (s)",
-    markers = []
+    markers = [],
+    linkGroup = null
   } = options;
 
   destroyExistingChart(element);
@@ -303,6 +364,10 @@ export function renderTimeSeriesChart(element, options) {
   element.__blackboxLabChart = chart;
   watchResize(element, chart);
   buildChartFooter(element, chart, seriesMeta, { withStats: true });
+
+  if (linkGroup) {
+    joinLinkGroup(linkGroup, chart, element);
+  }
 
   return chart;
 }
