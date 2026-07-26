@@ -208,15 +208,37 @@ export function findHighestLoadEvents(
   );
 }
 
-// Why was the output high here? Three answers a pilot can
-// act on, in priority order: the ESC genuinely ran out of
-// headroom; the battery sagged so more throttle was needed
-// for the same power; or it was simply a demanding moment
-// working as designed.
+// Did the collective drive this event? True when the event's
+// peak collective demand approaches the flight's own maximum
+// AND clearly exceeds the flight's typical level — the second
+// guard keeps a steady hover (where every moment is near the
+// tiny "maximum") from reading as a pitch pump.
+export function isCollectiveDriven({
+  eventPeakCollective,
+  flightPeakCollective,
+  flightMedianCollective
+}) {
+  return (
+    Number.isFinite(eventPeakCollective) &&
+    Number.isFinite(flightPeakCollective) &&
+    Number.isFinite(flightMedianCollective) &&
+    flightPeakCollective > 0 &&
+    eventPeakCollective >= flightPeakCollective * 0.7 &&
+    eventPeakCollective >= flightMedianCollective * 1.5
+  );
+}
+
+// Why was the output high here? Answers a pilot can act on,
+// in priority order: the ESC genuinely ran out of headroom;
+// the collective demanded it (a pitch pump — the load is the
+// pilot's doing, wording per Daniel); the battery sagged so
+// more throttle was needed for the same power; or it was
+// simply a demanding moment working as designed.
 export function explainLoadEvent({
   outputPeakPercent,
   outputSaturatedShare,
-  voltageSagPercent
+  voltageSagPercent,
+  collectiveDriven = false
 }) {
   const saturated =
     Number.isFinite(outputPeakPercent) &&
@@ -232,10 +254,20 @@ export function explainLoadEvent({
     };
   }
 
-  if (
+  const sagged =
     Number.isFinite(voltageSagPercent) &&
-    voltageSagPercent >= 8
-  ) {
+    voltageSagPercent >= 8;
+
+  if (collectiveDriven) {
+    return {
+      cause: "collective-load",
+      sentence: sagged
+        ? "Collective demand rose sharply at the same time as current, power and ESC output. This is consistent with a hard pitch pump or other demanding collective maneuver. The battery sag was a response to the load, not necessarily evidence of a weak pack."
+        : "Collective demand rose sharply at the same time as current, power and ESC output. This is consistent with a hard pitch pump or other demanding collective maneuver — the power system followed the demand with voltage holding up well."
+    };
+  }
+
+  if (sagged) {
     return {
       cause: "battery-sag",
       sentence:

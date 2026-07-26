@@ -50,6 +50,7 @@ import {
   windowStats,
   findHighestLoadEvents,
   explainLoadEvent,
+  isCollectiveDriven,
   groupByGovernorTarget,
   longestConsecutiveRun
 } from "./analysis/evidenceViews.js";
@@ -139,6 +140,7 @@ const loadEventsCard = el("loadEventsCard");
 const escEventsTable = el("escEventsTable");
 const escEventsStories = el("escEventsStories");
 const chartLoadOutput = el("chartLoadOutput");
+const chartLoadCollective = el("chartLoadCollective");
 const chartLoadPower = el("chartLoadPower");
 const chartLoadWatts = el("chartLoadWatts");
 const chartLoadTemp = el("chartLoadTemp");
@@ -192,6 +194,9 @@ const advancedModeToggle = el("advancedModeToggle");
 // ======================================================
 
 const navigation = initNavigation();
+
+// One source of truth: the same constant the update check uses.
+el("sidebarVersion").textContent = `v${APP_VERSION}`;
 
 function applyAdvancedMode(enabled) {
   document.body.classList.toggle("advanced-mode", enabled);
@@ -1486,6 +1491,38 @@ function renderEscEvidence(dataset) {
       : null;
   });
 
+  // Collective demand lets the app prove a pitch-pump load
+  // instead of leaving the pilot to correlate charts by hand.
+  const collectiveColumn =
+    dataset.findColumnsIn([/^setpoint\[3\]$/i])[0] ?? null;
+
+  const collectiveAbs = collectiveColumn
+    ? dataset
+        .columnValues(collectiveColumn)
+        .map((value) =>
+          Number.isFinite(value) ? Math.abs(value) : null
+        )
+    : null;
+
+  const collectiveFlightStats = (() => {
+    if (!collectiveAbs) {
+      return null;
+    }
+
+    const sorted = collectiveAbs
+      .filter(Number.isFinite)
+      .sort((first, second) => first - second);
+
+    if (sorted.length === 0) {
+      return null;
+    }
+
+    return {
+      peak: sorted[sorted.length - 1],
+      median: sorted[Math.floor(sorted.length / 2)]
+    };
+  })();
+
   // An all-zero temperature column means the sensor isn't
   // fitted (e.g. no second ESC) — don't plot a dead line.
   const temperatureEntries = [
@@ -1553,11 +1590,26 @@ function renderEscEvidence(dataset) {
         event.endIndex
       );
 
+      const eventCollective =
+        collectiveAbs && collectiveFlightStats
+          ? windowStats(
+              collectiveAbs,
+              event.startIndex,
+              event.endIndex
+            )
+          : null;
+
       const explanation = explainLoadEvent({
         outputPeakPercent: output?.max ?? null,
         outputSaturatedShare:
           outputCount > 0 ? saturatedCount / outputCount : null,
-        voltageSagPercent: sagPercent
+        voltageSagPercent: sagPercent,
+        collectiveDriven: isCollectiveDriven({
+          eventPeakCollective: eventCollective?.max ?? null,
+          flightPeakCollective: collectiveFlightStats?.peak ?? null,
+          flightMedianCollective:
+            collectiveFlightStats?.median ?? null
+        })
       });
 
       return { event, output, voltage, sagPercent, watts, explanation };
@@ -1586,9 +1638,11 @@ function renderEscEvidence(dataset) {
           <td>${
             explanation.cause === "headroom-limit"
               ? "At the limit"
-              : explanation.cause === "battery-sag"
-                ? "Battery sag"
-                : "Normal load"
+              : explanation.cause === "collective-load"
+                ? "Collective load"
+                : explanation.cause === "battery-sag"
+                  ? "Battery sag"
+                  : "Normal load"
           }</td>
         </tr>`
         )
@@ -1637,6 +1691,24 @@ function renderEscEvidence(dataset) {
         ],
         { yLabel: "output (%)", markers, linkGroup: "loadSync" }
       );
+
+      if (collectiveColumn) {
+        renderSyncedChart(
+          chartLoadCollective,
+          dataset,
+          window,
+          [
+            {
+              patterns: [/^setpoint\[3\]$/i],
+              label: "Collective target",
+              color: CHART_COLORS[5]
+            }
+          ],
+          { yLabel: "collective", markers, linkGroup: "loadSync" }
+        );
+      } else {
+        chartLoadCollective.hidden = true;
+      }
 
       renderSyncedChart(
         chartLoadPower,

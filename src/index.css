@@ -79,6 +79,13 @@ body {
   margin-top: 3px;
 }
 
+.sidebar-version {
+  color: var(--ink-muted);
+  font-size: 11px;
+  margin-top: 8px;
+  opacity: 0.8;
+}
+
 .sidebar h1 {
   margin: 0;
   font-size: 24px;
