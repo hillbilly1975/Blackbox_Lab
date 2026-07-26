@@ -506,6 +506,31 @@
             <p class="chart-empty">Open a log to see this chart.</p>
           </div>
         </section>
+
+        <section class="card" id="droopContextCard" hidden>
+          <h3>The Worst Droop, In Context</h3>
+          <p class="chart-hint" id="droopContextHint">
+            The seconds around the biggest dip, lined up on one
+            clock — zoom any chart and the others follow. Read top
+            to bottom: what the rotor did, what the pilot and
+            governor asked for, and what the power system delivered.
+          </p>
+          <div class="chart-container" id="chartDroopRpm">
+          </div>
+          <div class="chart-container" id="chartDroopDrive">
+          </div>
+          <div class="chart-container" id="chartDroopPower">
+          </div>
+          <div id="droopGovBlock" hidden>
+            <p class="chart-hint">
+              The governor's own P, I and F terms as recorded in the
+              log — shown only when the log genuinely contains them,
+              never estimated from throttle.
+            </p>
+            <div class="chart-container" id="chartDroopGov">
+            </div>
+          </div>
+        </section>
       </section>
 
       <!-- ============ ESC LAB ============ -->
@@ -529,6 +554,42 @@
           </p>
           <div class="chart-container" id="chartEsc">
             <p class="chart-empty">Open a log to see this chart.</p>
+          </div>
+        </section>
+
+        <section class="card" id="loadEventsCard" hidden>
+          <h3>Highest-Load Moments</h3>
+          <p class="chart-hint">
+            The hardest-working seconds of the flight, and why the
+            output was high: a real limit, a sagging battery, or
+            simply a demanding maneuver handled as designed.
+          </p>
+          <div class="table-scroll">
+            <table class="history-table" id="escEventsTable"></table>
+          </div>
+          <div id="escEventsStories"></div>
+          <p class="chart-hint" style="margin-top:14px;">
+            The biggest event on one clock — zoom any chart and the
+            others follow.
+          </p>
+          <div class="chart-container" id="chartLoadOutput">
+          </div>
+          <div class="chart-container" id="chartLoadPower">
+          </div>
+          <div class="chart-container" id="chartLoadWatts">
+          </div>
+          <div class="chart-container" id="chartLoadTemp" hidden>
+          </div>
+        </section>
+
+        <section class="card" id="escProfileCard" hidden>
+          <h3>By Headspeed Profile</h3>
+          <p class="chart-hint">
+            Stable-flight averages per governor bank — how much
+            harder each headspeed works the power system.
+          </p>
+          <div class="table-scroll">
+            <table class="history-table" id="escProfileTable"></table>
           </div>
         </section>
       </section>

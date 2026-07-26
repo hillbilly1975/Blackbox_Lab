@@ -45,6 +45,13 @@ import {
   clearHistory
 } from "./analysis/craftHistory.js";
 import { analyzeGovernorLab } from "./analysis/governorLabAnalysis.js";
+import {
+  sliceWindow,
+  windowStats,
+  findHighestLoadEvents,
+  explainLoadEvent,
+  groupByGovernorTarget
+} from "./analysis/evidenceViews.js";
 import { analyzeEscLab } from "./analysis/escLabAnalysis.js";
 import { analyzeBatteryLab } from "./analysis/batteryLabAnalysis.js";
 //
@@ -118,6 +125,23 @@ const governorStory = el("governorStory");
 const governorMetrics = el("governorMetrics");
 const escStory = el("escStory");
 const escMetrics = el("escMetrics");
+
+const droopContextCard = el("droopContextCard");
+const droopGovBlock = el("droopGovBlock");
+const chartDroopRpm = el("chartDroopRpm");
+const chartDroopDrive = el("chartDroopDrive");
+const chartDroopPower = el("chartDroopPower");
+const chartDroopGov = el("chartDroopGov");
+
+const loadEventsCard = el("loadEventsCard");
+const escEventsTable = el("escEventsTable");
+const escEventsStories = el("escEventsStories");
+const chartLoadOutput = el("chartLoadOutput");
+const chartLoadPower = el("chartLoadPower");
+const chartLoadWatts = el("chartLoadWatts");
+const chartLoadTemp = el("chartLoadTemp");
+const escProfileCard = el("escProfileCard");
+const escProfileTable = el("escProfileTable");
 const batteryStory = el("batteryStory");
 const batteryMetrics = el("batteryMetrics");
 
@@ -1127,6 +1151,492 @@ function renderTuningPresets(dataset) {
   }
 }
 
+// ---- synchronized evidence views (Governor & ESC Labs) ----
+// Evidence only: these read what the labs already computed and
+// what the log genuinely recorded. No score is touched here.
+
+function toDegreesCelsius(values) {
+  let max = 0;
+
+  for (const value of values) {
+    if (value > max) max = value;
+  }
+
+  // Logs store temperature either directly or ×10.
+  return max > 200
+    ? values.map((value) => value / 10)
+    : values;
+}
+
+function slicedSeries(dataset, window, entries) {
+  const series = [];
+
+  for (const entry of entries) {
+    let values = entry.values;
+
+    if (!values) {
+      const column = dataset.findColumnsIn(entry.patterns)[0];
+
+      if (!column) {
+        continue;
+      }
+
+      values = dataset.columnValues(column);
+      values = entry.convert ? entry.convert(values) : values;
+    }
+
+    series.push({
+      label: entry.label,
+      values: values.slice(window.startIndex, window.endIndex + 1),
+      color: entry.color
+    });
+  }
+
+  return series;
+}
+
+function renderSyncedChart(element, dataset, window, entries, options) {
+  const series = slicedSeries(dataset, window, entries);
+
+  if (series.length === 0) {
+    element.innerHTML = "";
+    element.hidden = true;
+    return false;
+  }
+
+  element.hidden = false;
+  renderTimeSeriesChart(element, {
+    timeSeconds: dataset.timeSeconds.slice(
+      window.startIndex,
+      window.endIndex + 1
+    ),
+    series,
+    height: 190,
+    ...options
+  });
+
+  return true;
+}
+
+function renderGovernorEvidence(dataset) {
+  const droopTime = dataset.labs.governor?.droopTimeSeconds;
+
+  const window = Number.isFinite(droopTime)
+    ? sliceWindow(dataset.timeSeconds, droopTime, 4, 6)
+    : null;
+
+  if (!window) {
+    droopContextCard.hidden = true;
+    return;
+  }
+
+  droopContextCard.hidden = false;
+
+  const markers = [{ x: droopTime, label: "worst droop" }];
+
+  const targetValues = dataset.governorTarget ?? [];
+  const actualValues = dataset.headspeed ?? [];
+  const errorValues = actualValues.map((actual, index) => {
+    const target = targetValues[index];
+    return Number.isFinite(target) && Number.isFinite(actual)
+      ? target - actual
+      : null;
+  });
+
+  renderSyncedChart(
+    chartDroopRpm,
+    dataset,
+    window,
+    [
+      { label: "govTarget", values: targetValues, color: CHART_COLORS[0] },
+      { label: "headspeed", values: actualValues, color: CHART_COLORS[1] },
+      { label: "RPM error", values: errorValues, color: CHART_COLORS[4] }
+    ],
+    { yLabel: "rpm", markers, linkGroup: "droopSync" }
+  );
+
+  renderSyncedChart(
+    chartDroopDrive,
+    dataset,
+    window,
+    [
+      {
+        patterns: [/^motor\[0\]$/i],
+        label: "Motor output (%)",
+        convert: toThrottlePercent,
+        color: CHART_COLORS[3]
+      },
+      {
+        patterns: [/^setpoint\[3\]$/i],
+        label: "Collective target",
+        color: CHART_COLORS[5]
+      }
+    ],
+    { yLabel: "% · collective", markers, linkGroup: "droopSync" }
+  );
+
+  renderSyncedChart(
+    chartDroopPower,
+    dataset,
+    window,
+    [
+      {
+        patterns: [/^vbat/i],
+        label: "Pack voltage (V)",
+        convert: toVolts,
+        color: CHART_COLORS[0]
+      },
+      {
+        patterns: [/^Ibat$/i, /amperage/i, /^EscI$/i, /current/i],
+        label: "Current (A)",
+        convert: toAmps,
+        color: CHART_COLORS[1]
+      }
+    ],
+    { yLabel: "volts · amps", markers, linkGroup: "droopSync" }
+  );
+
+  // Real recorded governor terms only — never derived.
+  const governorTermEntries = [
+    { patterns: [/^govP$/i], label: "govP", color: CHART_COLORS[3] },
+    { patterns: [/^govI$/i], label: "govI", color: CHART_COLORS[2] },
+    { patterns: [/^govD$/i], label: "govD", color: CHART_COLORS[4] },
+    { patterns: [/^govF$/i], label: "govF", color: CHART_COLORS[5] },
+    { patterns: [/^govSum$/i], label: "govSum", color: CHART_COLORS[0] }
+  ].filter(
+    (entry) => dataset.findColumnsIn(entry.patterns).length > 0
+  );
+
+  if (governorTermEntries.length === 0) {
+    droopGovBlock.hidden = true;
+  } else {
+    droopGovBlock.hidden = false;
+    renderSyncedChart(
+      chartDroopGov,
+      dataset,
+      window,
+      governorTermEntries,
+      { yLabel: "governor terms", markers, linkGroup: "droopSync" }
+    );
+  }
+}
+
+function renderEscEvidence(dataset) {
+  const outputColumn =
+    dataset.findColumnsIn([/^EscThr$/i])[0] ??
+    dataset.findColumnsIn([/^motor\[0\]$/i])[0];
+
+  const currentColumn =
+    dataset.findColumnsIn([/^EscI$/i])[0] ??
+    dataset.findColumnsIn([/^Ibat$/i, /amperage/i, /current/i])[0];
+
+  const voltageColumn =
+    dataset.findColumnsIn([/^EscV$/i])[0] ??
+    dataset.findColumnsIn([/^vbat/i])[0];
+
+  if (!outputColumn || !currentColumn || !voltageColumn) {
+    loadEventsCard.hidden = true;
+    escProfileCard.hidden = true;
+    return;
+  }
+
+  const outputPercent = toThrottlePercent(
+    dataset.columnValues(outputColumn)
+  );
+  const currentAmps = toAmps(dataset.columnValues(currentColumn));
+  const voltageVolts = toVolts(dataset.columnValues(voltageColumn));
+
+  const wattValues = currentAmps.map((amps, index) => {
+    const volts = voltageVolts[index];
+    return Number.isFinite(amps) && Number.isFinite(volts)
+      ? amps * volts
+      : null;
+  });
+
+  // An all-zero temperature column means the sensor isn't
+  // fitted (e.g. no second ESC) — don't plot a dead line.
+  const temperatureEntries = [
+    { patterns: [/^Tesc$/i], label: "Tesc", color: CHART_COLORS[1] },
+    { patterns: [/^Tesc2$/i], label: "Tesc2", color: CHART_COLORS[4] },
+    { patterns: [/^tempEsc/i, /escTemp/i], label: "ESC temp", color: CHART_COLORS[1] }
+  ].filter((entry) => {
+    const column = dataset.findColumnsIn(entry.patterns)[0];
+    return (
+      Boolean(column) &&
+      dataset.columnValues(column).some((value) => value > 0)
+    );
+  });
+
+  const events = findHighestLoadEvents(
+    { timeSeconds: dataset.timeSeconds, load: currentAmps },
+    { windowSeconds: 2, count: 3 }
+  );
+
+  if (events.length === 0) {
+    loadEventsCard.hidden = true;
+  } else {
+    loadEventsCard.hidden = false;
+
+    // Voltage baseline: the calm top end of the whole flight.
+    const sortedVoltage = voltageVolts
+      .filter(Number.isFinite)
+      .sort((first, second) => first - second);
+    const baselineVoltage =
+      sortedVoltage[Math.floor(sortedVoltage.length * 0.95)] ?? null;
+
+    const describedEvents = events.map((event) => {
+      const output = windowStats(
+        outputPercent,
+        event.startIndex,
+        event.endIndex
+      );
+
+      let saturatedCount = 0;
+      let outputCount = 0;
+
+      for (let i = event.startIndex; i <= event.endIndex; i += 1) {
+        if (Number.isFinite(outputPercent[i])) {
+          outputCount += 1;
+          if (outputPercent[i] >= 97) {
+            saturatedCount += 1;
+          }
+        }
+      }
+
+      const voltage = windowStats(
+        voltageVolts,
+        event.startIndex,
+        event.endIndex
+      );
+
+      const sagPercent =
+        baselineVoltage && voltage
+          ? ((baselineVoltage - voltage.min) / baselineVoltage) * 100
+          : null;
+
+      const watts = windowStats(
+        wattValues,
+        event.startIndex,
+        event.endIndex
+      );
+
+      const explanation = explainLoadEvent({
+        outputPeakPercent: output?.max ?? null,
+        outputSaturatedShare:
+          outputCount > 0 ? saturatedCount / outputCount : null,
+        voltageSagPercent: sagPercent
+      });
+
+      return { event, output, voltage, sagPercent, watts, explanation };
+    });
+
+    const cell = (value, digits = 1, suffix = "") =>
+      Number.isFinite(value)
+        ? `${value.toFixed(digits)}${suffix}`
+        : "—";
+
+    escEventsTable.innerHTML = `
+      <tr>
+        <th>When</th><th>Avg current</th><th>Peak current</th>
+        <th>Peak output</th><th>Peak power</th><th>Sag</th><th>Reading</th>
+      </tr>
+      ${describedEvents
+        .map(
+          ({ event, output, sagPercent, watts, explanation }) => `
+        <tr>
+          <td>${event.startSeconds.toFixed(1)}–${event.endSeconds.toFixed(1)} s</td>
+          <td>${cell(event.averageLoad, 1, " A")}</td>
+          <td>${cell(event.peakLoad, 1, " A")}</td>
+          <td>${cell(output?.max, 0, "%")}</td>
+          <td>${cell(watts?.max, 0, " W")}</td>
+          <td>${cell(sagPercent, 1, "%")}</td>
+          <td>${
+            explanation.cause === "headroom-limit"
+              ? "At the limit"
+              : explanation.cause === "battery-sag"
+                ? "Battery sag"
+                : "Normal load"
+          }</td>
+        </tr>`
+        )
+        .join("")}
+    `;
+
+    escEventsStories.innerHTML = "";
+
+    for (const { event, explanation } of describedEvents) {
+      const story = document.createElement("p");
+      story.className = "chart-hint";
+      story.textContent = `${event.startSeconds.toFixed(1)}–${event.endSeconds.toFixed(1)} s: ${explanation.sentence}`;
+      escEventsStories.appendChild(story);
+    }
+
+    // The biggest event gets the synchronized picture.
+    const biggest = describedEvents.reduce((best, candidate) =>
+      (candidate.event.averageLoad ?? 0) >
+      (best.event.averageLoad ?? 0)
+        ? candidate
+        : best
+    );
+
+    const window = sliceWindow(
+      dataset.timeSeconds,
+      biggest.event.peakSeconds,
+      3,
+      3
+    );
+
+    if (window) {
+      const markers = [
+        { x: biggest.event.peakSeconds, label: "peak load" }
+      ];
+
+      renderSyncedChart(
+        chartLoadOutput,
+        dataset,
+        window,
+        [
+          {
+            label: "ESC output (%)",
+            values: outputPercent,
+            color: CHART_COLORS[3]
+          }
+        ],
+        { yLabel: "output (%)", markers, linkGroup: "loadSync" }
+      );
+
+      renderSyncedChart(
+        chartLoadPower,
+        dataset,
+        window,
+        [
+          { label: "Current (A)", values: currentAmps, color: CHART_COLORS[1] },
+          { label: "Voltage (V)", values: voltageVolts, color: CHART_COLORS[0] }
+        ],
+        { yLabel: "amps · volts", markers, linkGroup: "loadSync" }
+      );
+
+      renderSyncedChart(
+        chartLoadWatts,
+        dataset,
+        window,
+        [
+          {
+            label: "Electrical power (W)",
+            values: wattValues,
+            color: CHART_COLORS[2]
+          }
+        ],
+        { yLabel: "watts", markers, linkGroup: "loadSync" }
+      );
+
+      if (temperatureEntries.length > 0) {
+        renderSyncedChart(
+          chartLoadTemp,
+          dataset,
+          window,
+          temperatureEntries.map((entry) => ({
+            ...entry,
+            convert: toDegreesCelsius
+          })),
+          { yLabel: "°C", markers, linkGroup: "loadSync" }
+        );
+      } else {
+        chartLoadTemp.hidden = true;
+      }
+    }
+  }
+
+  // ---- per-profile averages (stable flight only) ----
+  const phase =
+    dataset.headspeed && dataset.governorTarget
+      ? detectStableFlightPhase({
+          timeSeconds: dataset.timeSeconds,
+          headspeed: dataset.headspeed,
+          governorTarget: dataset.governorTarget
+        })
+      : null;
+
+  const banks = phase
+    ? groupByGovernorTarget({
+        governorTarget: dataset.governorTarget,
+        sampleIndexes: phase.stableIndexes ?? []
+      })
+    : [];
+
+  if (banks.length === 0) {
+    escProfileCard.hidden = true;
+    return;
+  }
+
+  const averageAt = (values, indexes) => {
+    let sum = 0;
+    let count = 0;
+
+    for (const index of indexes) {
+      if (Number.isFinite(values[index])) {
+        sum += values[index];
+        count += 1;
+      }
+    }
+
+    return count > 0 ? sum / count : null;
+  };
+
+  const maximumAt = (values, indexes) => {
+    let max = null;
+
+    for (const index of indexes) {
+      if (
+        Number.isFinite(values[index]) &&
+        (max === null || values[index] > max)
+      ) {
+        max = values[index];
+      }
+    }
+
+    return max;
+  };
+
+  const temperatureValues =
+    temperatureEntries.length > 0
+      ? toDegreesCelsius(
+          dataset.columnValues(
+            dataset.findColumnsIn(temperatureEntries[0].patterns)[0]
+          )
+        )
+      : null;
+
+  const profileCell = (value, digits = 1, suffix = "") =>
+    Number.isFinite(value)
+      ? `${value.toFixed(digits)}${suffix}`
+      : "—";
+
+  escProfileCard.hidden = false;
+  escProfileTable.innerHTML = `
+    <tr>
+      <th>Bank</th><th>Avg output</th><th>Avg current</th>
+      <th>Avg power</th><th>Max temp</th>
+    </tr>
+    ${banks
+      .map(
+        (bank) => `
+      <tr>
+        <td>${bank.targetRpm} rpm</td>
+        <td>${profileCell(averageAt(outputPercent, bank.indexes), 1, "%")}</td>
+        <td>${profileCell(averageAt(currentAmps, bank.indexes), 1, " A")}</td>
+        <td>${profileCell(averageAt(wattValues, bank.indexes), 0, " W")}</td>
+        <td>${
+          temperatureValues
+            ? profileCell(maximumAt(temperatureValues, bank.indexes), 0, " °C")
+            : "—"
+        }</td>
+      </tr>`
+      )
+      .join("")}
+  `;
+}
+
 function renderAllCharts(dataset) {
   if (!dataset) {
     for (const element of [
@@ -1139,6 +1649,10 @@ function renderAllCharts(dataset) {
       element.innerHTML =
         '<p class="chart-empty">No plottable telemetry found in this log.</p>';
     }
+
+    droopContextCard.hidden = true;
+    loadEventsCard.hidden = true;
+    escProfileCard.hidden = true;
 
     return;
   }
@@ -1232,6 +1746,9 @@ function renderAllCharts(dataset) {
     chartSpectrum.innerHTML =
       '<p class="chart-empty">Not enough gyro data for a spectrum.</p>';
   }
+
+  renderGovernorEvidence(dataset);
+  renderEscEvidence(dataset);
 }
 
 function renderQuality(dataset, flightStats) {
