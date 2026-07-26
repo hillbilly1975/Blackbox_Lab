@@ -1,3 +1,57 @@
+## v0.3.5 — the tuning charts release
+
+### Added
+
+- **Per-axis tuning preset charts** (from Ben Britton's feedback):
+  the Log Viewer's single roll-only Setpoint-vs-Gyro chart is now
+  three cards — Roll, Pitch and Yaw Tuning — each with three
+  ready-made presets: Tracking (target + gyro), Feedforward check
+  (+ I-term: I near zero while tracking = FF carrying the
+  maneuver, as Rotorflight intends) and Term balance
+  (target + P/I/D). Beginner mode shows Tracking only; Advanced
+  mode lays everything out. Colors mean the same thing on every
+  chart: blue target, orange gyro, green I, amber P, magenta D.
+- **Remove individual flights from the Health Record**: every row
+  in the Logged Flights table has a ✕ button — one bad log no
+  longer means wiping the whole record. Trends recompute without
+  the removed flight; Clear all history stays for the full wipe.
+- The HTML report now includes the tracking chart for all three
+  axes (was roll only).
+- **Governor Lab: "The Worst Droop, In Context"** — the seconds
+  around the biggest dip on one linked clock: target/actual RPM
+  and error, motor output + collective, voltage + current, and
+  the log's own recorded governor P/I/D/F/Sum terms (shown only
+  when genuinely present, never estimated from throttle).
+- **ESC Lab: "Highest-Load Moments"** — the hardest-working
+  seconds with a plain-language cause each (at the limit /
+  battery sag / normal load), a synchronized view of output,
+  current + voltage, power and ESC temperature around the
+  biggest event, and stable-flight averages per governor bank.
+  ESC temperature telemetry is read for the first time.
+- Charts in these views share their zoom — drag on one and the
+  others follow. All scoring is untouched: evidence only.
+- **PID Lab: "Tracking By Headspeed Profile"** — per-bank,
+  per-axis tracking error plus an overshoot measure, because
+  helicopters behave differently at different headspeeds.
+- **Filter Lab: "Noise By Headspeed Profile"** — one spectrum
+  per governor bank from that bank's own stable flight time,
+  with peak classification and filter advice at that bank's
+  actual rpm. Rotor harmonics move with headspeed; the combined
+  spectrum can average away a peak that only one bank sees.
+  Both per-profile cards appear when a flight visits two or
+  more banks; scoring is untouched.
+- **ESC load events understand collective**: the synchronized
+  event view now includes the collective trace, and when an
+  event's collective demand nears the flight's own maximum the
+  reading becomes "Collective load" — the sag was a response to
+  the load, not necessarily evidence of a weak pack.
+- The sidebar now shows the app version.
+
+### Fixed
+
+- The UI smoke test now asserts that all nine preset charts
+  render with scaled data.
+
 ## v0.3.4 — feedforward doctrine + release repair
 
 Builds directly on v0.3.3's scoring cleanup.
