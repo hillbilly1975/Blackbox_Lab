@@ -777,10 +777,28 @@ body:not(.log-loaded) .loaded-only { display: none; }
   pointer-events: none;
 }
 
-.welcome-copter {
-  font-size: 44px;
-  margin-bottom: 6px;
-  filter: drop-shadow(0 6px 16px rgba(255, 196, 107, 0.25));
+.welcome-mark {
+  margin-bottom: 10px;
+  line-height: 0;
+  filter: drop-shadow(0 6px 18px rgba(111, 178, 255, 0.28))
+    drop-shadow(0 2px 8px rgba(255, 196, 107, 0.18));
+}
+
+/* The rotor idles — slow enough to feel alive, not busy. */
+.welcome-mark-rotor {
+  animation: welcome-rotor-turn 40s linear infinite;
+  transform-origin: 60px 60px;
+}
+
+@keyframes welcome-rotor-turn {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-mark-rotor {
+    animation: none;
+  }
 }
 
 .welcome-title {
