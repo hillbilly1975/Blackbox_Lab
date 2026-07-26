@@ -50,6 +50,31 @@ const { mkdirSync } = require("node:fs");
   }
   console.log("chart scale ok:", JSON.stringify(chartState));
 
+  // Same guard for the per-axis tuning preset grid — all nine
+  // charts must exist with scaled data (they render even while
+  // their advanced blocks are hidden in beginner mode).
+  const presetState = await window.evaluate(() => {
+    const ids = [
+      "chartTracking", "chartTrackingPitch", "chartTrackingYaw",
+      "chartFfRoll", "chartFfPitch", "chartFfYaw",
+      "chartTermsRoll", "chartTermsPitch", "chartTermsYaw"
+    ];
+    return ids.map((id) => {
+      const el = document.getElementById(id);
+      const u = el && el.__blackboxLabChart;
+      return {
+        id,
+        ok: Boolean(u && u.scales.x.min != null && u.scales.x.max > u.scales.x.min)
+      };
+    });
+  });
+  const badPresets = presetState.filter((entry) => !entry.ok);
+  if (badPresets.length) {
+    throw new Error("preset charts without scaled data: " +
+      badPresets.map((entry) => entry.id).join(", "));
+  }
+  console.log("preset grid ok: 9/9 charts scaled");
+
   await window.click(".verdict-jump");
   await window.waitForTimeout(600);
   await window.screenshot({ path: "smoke-shots/02-filter-zoomed.png" });
