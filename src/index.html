@@ -838,6 +838,24 @@ current demand; the steady downward slope is normal discharge.
     </main>
   </div>
 
+  <!-- Load progress: shown when a log is opened from any screen
+       other than Home, where the inline status is not visible. -->
+  <div class="overlay" id="loadProgress" hidden>
+    <div class="overlay-dialog load-dialog">
+      <div class="load-spinner" id="loadSpinner" aria-hidden="true"></div>
+      <h3 id="loadProgressTitle">Reading your flight…</h3>
+      <p id="loadProgressText"></p>
+      <div class="button-row" id="loadProgressActions" hidden>
+        <button class="primary-button" id="loadGoOverview">
+          Go to the overview
+        </button>
+        <button class="secondary-button" id="loadStayHere">
+          Stay on this page
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="overlay" id="contributeAsk" hidden>
     <div class="overlay-dialog">
       <h3>Help improve Blackbox Lab?</h3>
