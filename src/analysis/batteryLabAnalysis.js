@@ -2,138 +2,395 @@
 // BLACKBOX LAB — BATTERY LAB ANALYSIS
 // ======================================================
 //
-// Pack health from the flight itself: sag, estimated
-// internal resistance (voltage dip vs current step),
-// consumed capacity and per-cell numbers.
+// Charts may show the complete recording.
 //
-// All electrical units are ESTIMATES — logs store raw
-// values whose scaling differs between setups. The Lab
-// says so honestly.
+// Battery conclusions use only stable governed-flight
+// samples. Spool-up, spool-down, ground operation and
+// headspeed-profile transitions are excluded.
+//
+// Electrical values remain estimates because telemetry
+// scaling and calibration vary between installations.
 //
 // ======================================================
 
+import {
+  detectStableFlightPhase
+} from "./flightPhase.js";
+
 function averageOf(values) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return null;
+  }
+
   let sum = 0;
 
   for (const value of values) {
     sum += value;
   }
 
-  return values.length ? sum / values.length : null;
+  return sum / values.length;
 }
 
-export function analyzeBatteryLab({ timeSeconds, vbat, amperage }) {
-  if (!vbat || vbat.length < 200) {
+function minimumOf(values) {
+  let minimum = Infinity;
+
+  for (const value of values) {
+    if (Number.isFinite(value) && value < minimum) {
+      minimum = value;
+    }
+  }
+
+  return Number.isFinite(minimum) ? minimum : null;
+}
+
+export function analyzeBatteryLab({
+  timeSeconds,
+  vbat,
+  amperage,
+  headspeed,
+  governorTarget
+}) {
+  if (
+    !Array.isArray(vbat) ||
+    vbat.length < 200
+  ) {
     return null;
   }
 
-  const rawAverage = averageOf(vbat);
-  const voltsScale = rawAverage > 1000 ? 100 : rawAverage > 100 ? 10 : 1;
-  const volts = vbat.map((value) => value / voltsScale);
+  const sampleCount = Math.min(
+    timeSeconds?.length ?? 0,
+    vbat.length,
+    headspeed?.length ?? 0,
+    governorTarget?.length ?? 0
+  );
 
-  const startVolts = averageOf(volts.slice(0, 100));
-  const endVolts = averageOf(volts.slice(-100));
-
-  let minVolts = Infinity;
-
-  for (const value of volts) {
-    if (value < minVolts) {
-      minVolts = value;
-    }
+  if (sampleCount < 200) {
+    return null;
   }
 
-  // Cell count: assume a full cell is ≤ 4.35 V.
-  const cellCount = Math.max(1, Math.round(startVolts / 4.1));
-  const sagPercent = ((startVolts - endVolts) / startVolts) * 100;
+  const alignedTime =
+    timeSeconds.slice(0, sampleCount);
 
-  let maxAmperage = 0;
+  const alignedVbat =
+    vbat.slice(0, sampleCount);
 
-  if (amperage) {
-    for (const value of amperage) {
-      if (value > maxAmperage) {
-        maxAmperage = value;
+  const alignedAmperage =
+    Array.isArray(amperage)
+      ? amperage.slice(0, sampleCount)
+      : null;
+
+  const alignedHeadspeed =
+    headspeed.slice(0, sampleCount);
+
+  const alignedTarget =
+    governorTarget.slice(0, sampleCount);
+
+  const rawAverage = averageOf(alignedVbat);
+
+  const voltsScale =
+    rawAverage > 1000
+      ? 100
+      : rawAverage > 100
+        ? 10
+        : 1;
+
+  const volts = alignedVbat.map(
+    (value) => Number(value) / voltsScale
+  );
+
+  let maxRawAmperage = 0;
+
+  if (alignedAmperage) {
+    for (const value of alignedAmperage) {
+      const numericValue = Number(value);
+
+      if (
+        Number.isFinite(numericValue) &&
+        numericValue > maxRawAmperage
+      ) {
+        maxRawAmperage = numericValue;
       }
     }
   }
 
-  const ampsScale = maxAmperage > 500 ? 100 : 1;
-  const amps = amperage
-    ? amperage.map((value) => value / ampsScale)
+  const ampsScale =
+    maxRawAmperage > 500 ? 100 : 1;
+
+  const amps = alignedAmperage
+    ? alignedAmperage.map(
+        (value) => Number(value) / ampsScale
+      )
     : null;
 
-  // ---- consumed capacity: integrate current over time ----
+  const flightPhase = detectStableFlightPhase({
+    timeSeconds: alignedTime,
+    headspeed: alignedHeadspeed,
+    governorTarget: alignedTarget
+  });
+
+  const stableIndexes =
+    flightPhase.stableIndexes ?? [];
+
+  if (stableIndexes.length < 100) {
+    return {
+      status: "insufficient",
+      story:
+        "No stable governed-flight section was long enough for a reliable battery assessment.",
+      metrics: [
+        {
+          label: "Stable samples",
+          value: String(stableIndexes.length)
+        },
+        {
+          label: "Battery result",
+          value: "Insufficient stable-flight data"
+        }
+      ],
+      sagPercent: null,
+      internalResistance: null,
+      endVoltsPerCell: null,
+      stableSampleCount: stableIndexes.length
+    };
+  }
+
+  const stableVolts = stableIndexes
+    .map((index) => volts[index])
+    .filter(Number.isFinite);
+
+  const firstStableIndexes =
+    stableIndexes.slice(
+      0,
+      Math.min(1000, stableIndexes.length)
+    );
+
+  const lastStableIndexes =
+    stableIndexes.slice(
+      Math.max(0, stableIndexes.length - 1000)
+    );
+
+  const startVolts = averageOf(
+    firstStableIndexes
+      .map((index) => volts[index])
+      .filter(Number.isFinite)
+  );
+
+  const endVolts = averageOf(
+    lastStableIndexes
+      .map((index) => volts[index])
+      .filter(Number.isFinite)
+  );
+
+  const minVolts = minimumOf(stableVolts);
+
+  if (
+    !Number.isFinite(startVolts) ||
+    !Number.isFinite(endVolts) ||
+    !Number.isFinite(minVolts)
+  ) {
+    return null;
+  }
+
+  // Cell count estimate based on the beginning of the
+  // valid governed-flight window.
+  const cellCount = Math.max(
+    1,
+    Math.round(startVolts / 4.1)
+  );
+
+  const endPerCell =
+    endVolts / cellCount;
+
+  const minimumPerCell =
+    minVolts / cellCount;
+
+  const flightVoltageDropPercent =
+    ((startVolts - endVolts) / startVolts) * 100;
+
+  // ---- consumed capacity during stable flight only ----
   let consumedMah = null;
 
-  if (amps && timeSeconds && timeSeconds.length === amps.length) {
+  if (
+    amps &&
+    amps.length === alignedTime.length
+  ) {
     let ampSeconds = 0;
 
-    for (let i = 1; i < amps.length; i += 1) {
-      const dt = timeSeconds[i] - timeSeconds[i - 1];
+    for (
+      let stablePosition = 1;
+      stablePosition < stableIndexes.length;
+      stablePosition += 1
+    ) {
+      const previousIndex =
+        stableIndexes[stablePosition - 1];
 
-      if (dt > 0 && dt < 1) {
-        ampSeconds += amps[i] * dt;
+      const currentIndex =
+        stableIndexes[stablePosition];
+
+      // Do not integrate across gaps between separate
+      // stable-flight segments.
+      if (currentIndex !== previousIndex + 1) {
+        continue;
+      }
+
+      const dt =
+        alignedTime[currentIndex] -
+        alignedTime[previousIndex];
+
+      const currentAmps =
+        Number(amps[currentIndex]);
+
+      const previousAmps =
+        Number(amps[previousIndex]);
+
+      if (
+        Number.isFinite(dt) &&
+        dt > 0 &&
+        dt < 1 &&
+        Number.isFinite(currentAmps) &&
+        Number.isFinite(previousAmps)
+      ) {
+        const averageAmps =
+          (currentAmps + previousAmps) / 2;
+
+        ampSeconds += averageAmps * dt;
       }
     }
 
-    consumedMah = Math.round((ampSeconds / 3600) * 1000);
+    consumedMah = Math.round(
+      (ampSeconds / 3600) * 1000
+    );
   }
 
-  // ---- internal resistance: correlate ΔV with ΔI ----
+  // ---- estimated internal resistance ----
+  //
+  // Only evaluate current steps that occur fully inside
+  // stable flight. This avoids startup and transition sag.
   let internalResistancePerCell = null;
 
-  if (amps && amps.length === volts.length) {
+  if (
+    amps &&
+    amps.length === volts.length
+  ) {
+    const stableSet =
+      new Set(stableIndexes);
+
     let best = null;
 
-    for (let i = 50; i < amps.length; i += 1) {
-      const deltaAmps = amps[i] - amps[i - 50];
+    for (
+      let index = 50;
+      index < amps.length;
+      index += 1
+    ) {
+      if (
+        !stableSet.has(index) ||
+        !stableSet.has(index - 50)
+      ) {
+        continue;
+      }
+
+      const deltaAmps =
+        amps[index] - amps[index - 50];
 
       if (deltaAmps > 15) {
-        const deltaVolts = volts[i - 50] - volts[i];
+        const deltaVolts =
+          volts[index - 50] - volts[index];
 
         if (deltaVolts > 0) {
-          const resistance = deltaVolts / deltaAmps; // ohms, whole pack
-          if (best === null || resistance < best) {
-            best = resistance;
+          const packResistance =
+            deltaVolts / deltaAmps;
+
+          if (
+            best === null ||
+            packResistance < best
+          ) {
+            best = packResistance;
           }
         }
       }
     }
 
     if (best !== null) {
-      internalResistancePerCell = (best / cellCount) * 1000; // mΩ
+      internalResistancePerCell =
+        (best / cellCount) * 1000;
     }
   }
 
-  const endPerCell = endVolts / cellCount;
-
+  // Do not diagnose pack age or condition from ordinary
+  // discharge alone. A brief loaded dip is evidence to
+  // review, not proof that a pack is tired.
   const status =
-    endPerCell < 3.5 || sagPercent > 12
+    minimumPerCell < 3.45
       ? "attention"
-      : endPerCell < 3.7 || sagPercent > 8
+      : minimumPerCell < 3.6
         ? "watch"
         : "good";
 
   const story =
     status === "good"
-      ? `The pack held up well: ${startVolts.toFixed(1)} V → ${endVolts.toFixed(1)} V (${(endPerCell).toFixed(2)} V per cell at landing).`
+      ? `Pack voltage remained within the normal reviewed range during stable flight. It began the analyzed window near ${startVolts.toFixed(
+          1
+        )} V and ended near ${endVolts.toFixed(
+          1
+        )} V. Lowest stable-flight voltage was ${minVolts.toFixed(
+          1
+        )} V (${minimumPerCell.toFixed(
+          2
+        )} V per cell). No clear evidence of a weak or tired pack.`
       : status === "watch"
-        ? `Worked but tired: landed at ${endPerCell.toFixed(2)} V per cell. Shorter flights or a fresher pack would be kinder.`
-        : `This pack is struggling: ${sagPercent.toFixed(0)}% sag and ${endPerCell.toFixed(2)} V per cell at landing. Retire it from hard flights.`;
+        ? `The lowest stable-flight voltage was ${minVolts.toFixed(
+            1
+          )} V (${minimumPerCell.toFixed(
+            2
+          )} V per cell). Review the matching current and throttle event, but this dip alone does not prove the pack is tired.`
+        : `Stable-flight voltage reached ${minVolts.toFixed(
+            1
+          )} V (${minimumPerCell.toFixed(
+            2
+          )} V per cell). Review pack condition, connectors and load before another hard flight.`;
 
   const metrics = [
-    { label: "Pack (detected)", value: `${cellCount}S (est.)` },
-    { label: "Start → end", value: `${startVolts.toFixed(1)} → ${endVolts.toFixed(1)} V (est.)` },
-    { label: "Lowest voltage", value: `${minVolts.toFixed(1)} V (${(minVolts / cellCount).toFixed(2)} V/cell)` }
+    {
+      label: "Pack (detected)",
+      value: `${cellCount}S (est.)`
+    },
+    {
+      label: "Stable-flight start → end",
+      value: `${startVolts.toFixed(
+        1
+      )} → ${endVolts.toFixed(1)} V (est.)`
+    },
+    {
+      label: "Lowest stable-flight voltage",
+      value: `${minVolts.toFixed(
+        1
+      )} V (${minimumPerCell.toFixed(
+        2
+      )} V/cell)`
+    },
+    {
+      label: "Stable samples used",
+      value: stableIndexes.length.toLocaleString()
+    }
   ];
 
-  if (consumedMah) {
-    metrics.push({ label: "Consumed", value: `~${consumedMah} mAh (est.)` });
+  if (
+    Number.isFinite(consumedMah) &&
+    consumedMah > 0
+  ) {
+    metrics.push({
+      label: "Stable-flight consumption",
+      value: `~${consumedMah} mAh (est.)`
+    });
   }
 
-  if (internalResistancePerCell) {
+  if (
+    Number.isFinite(internalResistancePerCell)
+  ) {
     metrics.push({
       label: "Internal resistance",
-      value: `~${internalResistancePerCell.toFixed(1)} mΩ/cell (est.)`
+      value: `~${internalResistancePerCell.toFixed(
+        1
+      )} mΩ/cell (est.)`
     });
   }
 
@@ -141,10 +398,30 @@ export function analyzeBatteryLab({ timeSeconds, vbat, amperage }) {
     status,
     story,
     metrics,
-    sagPercent: Math.round(sagPercent * 100) / 100,
-    internalResistance: internalResistancePerCell
-      ? Math.round(internalResistancePerCell * 10) / 10
-      : null,
-    endVoltsPerCell: Math.round(endPerCell * 100) / 100
+
+    sagPercent:
+      Math.round(
+        flightVoltageDropPercent * 100
+      ) / 100,
+
+    internalResistance:
+      Number.isFinite(
+        internalResistancePerCell
+      )
+        ? Math.round(
+            internalResistancePerCell * 10
+          ) / 10
+        : null,
+
+    endVoltsPerCell:
+      Math.round(endPerCell * 100) / 100,
+
+    minimumVoltsPerCell:
+      Math.round(
+        minimumPerCell * 100
+      ) / 100,
+
+    stableSampleCount:
+      stableIndexes.length
   };
 }

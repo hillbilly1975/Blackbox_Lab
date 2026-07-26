@@ -1,3 +1,24 @@
+## Unreleased
+
+### Fixed
+
+- Stable-flight detection now supports both full headspeed/governor-target logs and headspeed-only logs.
+- Governor tracking and droop scoring are withheld when governor-target telemetry is unavailable.
+- Overall Score now shows `N/A / Not Scored` when no performance systems are available for scoring.
+- ESC and Governor sections now show explicit unavailable states instead of creating misleading scores.
+- Missing evidence no longer produces false 100/100 Filter results.
+- Filter Advisor peak detection now uses prominence above the local noise floor instead of raw FFT magnitude alone.
+- Unavailable governor evidence no longer increases analysis confidence.
+- Removed temporary application debug logging from analysis and rendering modules.
+- Tightened recommendation wording so incomplete evidence does not produce unsupported tuning advice.
+
+### Verified
+
+- Bell BBL and matching CSV agree at 94/100 overall.
+- Bell Governor result remains 83/100 — Watch.
+- Stable-flight governor dip remains 22 RPM / 1.2%.
+- Kraken headspeed-only logs still render Noise Spectrum and Filter Advisor while correctly withholding unsupported scoring.
+- Test suite: 45 total, 44 passed, 0 failed, 1 skipped.
 # Changelog
 
 ## v0.3.0 — "The Birthday Build, Part Two" (same evening)

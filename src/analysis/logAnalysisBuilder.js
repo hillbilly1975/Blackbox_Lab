@@ -10,6 +10,10 @@ import {
 import { buildFlightAnalysis } from "./flightAnalysis.js";
 import { analyzePids } from "./pidAnalysis.js";
 import { analyzeFilters } from "./filterAnalysis.js";
+import {
+  detectStableFlightPhase
+} from "./flightPhase.js";
+import { analyzeGovernorLab } from "./governorLabAnalysis.js";
 function detectHeadspeedProfiles(
   headspeedValues,
   governorTargetValues,
@@ -25,6 +29,25 @@ function detectHeadspeedProfiles(
 ) {
   return [];
 }
+const stableFlightPhase =
+  rowAlignedSamples.length > 0
+    ? detectStableFlightPhase({
+        timeSeconds: rowAlignedSamples.map(
+          (sample) => sample.timeSeconds
+        ),
+        headspeed: rowAlignedSamples.map(
+          (sample) => sample.measuredRpm
+        ),
+        governorTarget: rowAlignedSamples.map(
+          (sample) => sample.targetRpm
+        )
+      })
+    : null;
+
+const stableSampleIndexes =
+  new Set(
+    stableFlightPhase?.stableIndexes || []
+  );
 
 const profileSamples =
   rowAlignedSamples.length > 0
@@ -39,7 +62,20 @@ const profileSamples =
 
   const profileGroups = new Map();
 
-  for (const sample of profileSamples) {
+  for (
+  let sampleIndex = 0;
+  sampleIndex < profileSamples.length;
+  sampleIndex += 1
+) {
+  const sample = profileSamples[sampleIndex];
+
+  if (
+    stableFlightPhase &&
+    !stableSampleIndexes.has(sampleIndex)
+  ) {
+    continue;
+  }
+
   const measuredRpm = Number(sample.measuredRpm);
   const targetRpm = Number(sample.targetRpm);
 
@@ -162,7 +198,10 @@ export function buildLogAnalysis({
         headers,
         ["escrpm"]
       );
-
+const timeHeader = findHeader(
+  headers,
+  ["time"]
+);
       const headspeedHeader = findHeader(
         headers,
         ["headspeed"]
@@ -188,6 +227,28 @@ export function buildLogAnalysis({
   lines,
   telemetryHeaderIndex,
   headspeedHeader
+);
+const timeSamples = getColumnSamples(
+  lines,
+  telemetryHeaderIndex,
+  timeHeader
+);
+
+const firstTimeMicroseconds =
+  timeSamples.find(
+    (sample) => Number.isFinite(sample.value)
+  )?.value ?? 0;
+
+const timeByRow = new Map(
+  timeSamples.map((sample) => [
+    sample.rowIndex,
+    Number.isFinite(sample.value)
+      ? (
+          sample.value -
+          firstTimeMicroseconds
+        ) / 1_000_000
+      : null
+  ])
 );
 
 const headspeedSamples = getColumnSamples(
@@ -224,10 +285,12 @@ const governorTargetByRow = new Map(
 const alignedHeadspeedSamples = headspeedSamples
   .map((sample) => ({
     rowIndex: sample.rowIndex,
+    timeSeconds: timeByRow.get(sample.rowIndex),
     measuredRpm: sample.value,
     targetRpm: governorTargetByRow.get(sample.rowIndex)
   }))
   .filter((sample) =>
+    Number.isFinite(sample.timeSeconds) &&
     Number.isFinite(sample.measuredRpm) &&
     Number.isFinite(sample.targetRpm)
   );
@@ -239,10 +302,7 @@ const headspeedProfiles =
     alignedHeadspeedSamples
   );
 
-console.log(
-  "Detected headspeed profiles:",
-  headspeedProfiles
-);
+
       const keyHeaders = [
         ["Time", findHeader(headers, ["time"])],
 
@@ -346,12 +406,39 @@ pidAnalysis = analyzePids(
   lines,
   filterAnalysis?.profileSpecificFilterAnalysis ?? []
 );
+const governorLabSamples = headspeedSamples
+  .map((sample) => ({
+    timeSeconds: timeByRow.get(sample.rowIndex),
+    measuredRpm: sample.value,
+    targetRpm: governorTargetByRow.get(sample.rowIndex)
+  }))
+  .filter(
+    (sample) =>
+      Number.isFinite(sample.timeSeconds) &&
+      Number.isFinite(sample.measuredRpm)
+  );
+
+const governorLabAnalysis = analyzeGovernorLab({
+  timeSeconds: governorLabSamples.map(
+    (sample) => sample.timeSeconds
+  ),
+  headspeed: governorLabSamples.map(
+    (sample) => sample.measuredRpm
+  ),
+  governorTarget:
+    governorTargetSamples.length >= 100
+      ? governorLabSamples.map(
+          (sample) => sample.targetRpm
+        )
+      : []
+});
       flightAnalysis = buildFlightAnalysis(
         averageEscOutput,
         profile,
         keyHeaders,
         headspeedValues,
-        governorTargetValues
+        governorTargetValues,
+        governorLabAnalysis
       );
 
       telemetryText =
@@ -417,7 +504,8 @@ pidAnalysis = analyzePids(
       <strong>INTELLIGENT FLIGHT ANALYSIS</strong><br>
 
       Overall Flight Score: ${
-        flightAnalysis
+        flightAnalysis &&
+      Number.isFinite(flightAnalysis.overallScore)
           ? `${flightAnalysis.overallScore}/100`
           : "N/A"
       }<br>
@@ -444,8 +532,10 @@ pidAnalysis = analyzePids(
       }<br>
 
       ESC Operating Range: ${
-        flightAnalysis
-          ? `${flightAnalysis.esc.score}/100 — ${flightAnalysis.esc.status}`
+  flightAnalysis
+    ? flightAnalysis.esc.status === "Unavailable"
+      ? "N/A — Unavailable"
+      : `${flightAnalysis.esc.score}/100 — ${flightAnalysis.esc.status}`
           : "N/A"
       }<br>
 
@@ -456,10 +546,14 @@ pidAnalysis = analyzePids(
       }<br>
 
       Governor Performance: ${
-        flightAnalysis
-          ? `${flightAnalysis.governor.score}/100 — ${flightAnalysis.governor.status}`
-          : "N/A"
-      }<br>
+  flightAnalysis
+    ? flightAnalysis.governor.status === "Unavailable" ||
+      flightAnalysis.governor.status === "No Active Flight Data"||
+      flightAnalysis.governor.status === "Target Unavailable"
+      ? `N/A — ${flightAnalysis.governor.status}`
+      : `${flightAnalysis.governor.score}/100 — ${flightAnalysis.governor.status}`
+         : "N/A"
+    }<br>
 
       <br>
       <strong>Findings</strong><br>

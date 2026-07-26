@@ -29,6 +29,9 @@ import {
   computeNoiseSpectrum,
   estimateSampleRate
 } from "./analysis/dsp/fft.js";
+import {
+  detectStableFlightPhase
+} from "./analysis/flightPhase.js";
 import { buildFlightVerdict } from "./analysis/flightVerdict.js";
 import { compareFlights } from "./analysis/compareFlights.js";
 import { assessLogQuality } from "./analysis/logQuality.js";
@@ -329,10 +332,18 @@ function hasOwnUnfiltered(headerLine) {
 }
 
 function findColumns(headerLine, patterns) {
-  const names = headerLine.split(",").map((name) => name.trim());
+  const names = headerLine
+    .split(",")
+    .map((name) =>
+      name
+        .trim()
+        .replace(/^"|"$/g, "")
+    );
 
   return names.filter((name) =>
-    patterns.some((pattern) => pattern.test(name))
+    patterns.some((pattern) =>
+      pattern.test(name)
+    )
   );
 }
 
@@ -365,7 +376,13 @@ function averageOf(values) {
 // frames) splitting the lines per column read costs seconds;
 // this table makes each column access instant.
 function buildColumnTable(lines, headerIndex) {
-  const names = lines[headerIndex].split(",").map((name) => name.trim());
+ const names = lines[headerIndex]
+  .split(",")
+  .map((name) =>
+    name
+      .trim()
+      .replace(/^"|"$/g, "")
+  );
   const table = new Map(names.map((name) => [name, []]));
   const columns = names.map((name) => table.get(name));
 
@@ -394,6 +411,61 @@ function buildDataset(lines, pidAnalysis) {
   const headerLine = lines[headerIndex];
   const columnTable = buildColumnTable(lines, headerIndex);
   const columnValues = (name) => columnTable.get(name) ?? [];
+  const alignedColumnValues = (columnName) => {
+  if (!columnName) {
+    return [];
+  }
+
+  const headers = headerLine
+    .split(",")
+    .map((header) =>
+      header
+        .trim()
+        .replace(/^"|"$/g, "")
+    );
+
+  const normalizedColumnName =
+    String(columnName)
+      .trim()
+      .replace(/^"|"$/g, "");
+
+  const columnIndex =
+    headers.indexOf(normalizedColumnName);
+
+  if (columnIndex < 0) {
+    return [];
+  }
+
+  const values = [];
+
+  for (
+    let rowIndex = headerIndex + 1;
+    rowIndex < lines.length;
+    rowIndex += 1
+  ) {
+    const cells = lines[rowIndex].split(",");
+
+    const rawValue =
+      cells[columnIndex]
+        ?.trim()
+        .replace(/^"|"$/g, "") ?? "";
+
+    if (rawValue === "") {
+      values.push(null);
+      continue;
+    }
+
+    const value = Number(rawValue);
+
+    values.push(
+      Number.isFinite(value)
+        ? value
+        : null
+    );
+  }
+
+  return values;
+};
   const firstColumn = (patterns) => {
     const matches = findColumns(headerLine, patterns);
 
@@ -405,7 +477,7 @@ function buildDataset(lines, pidAnalysis) {
     return values.length > 0 ? values : null;
   };
 
-  const timeColumnName = findColumns(headerLine, [/^time/i])[0];
+  const timeColumnName = findColumns(headerLine, [/time/i])[0];
 
   if (!timeColumnName) {
     return null;
@@ -439,42 +511,144 @@ function buildDataset(lines, pidAnalysis) {
       : findColumns(headerLine, [/^gyroADC/i])
   ).slice(0, 3);
 
-  let spectrumStart = Math.floor(timeSeconds.length * 0.15);
+  const fftWindowSize = 4096;
 
-  if (headspeed && headspeed.length > 200) {
-    const settled = averageOf(
-      headspeed.slice(-Math.floor(headspeed.length / 3))
-    );
+const headspeedColumnName =
+  findColumns(
+    headerLine,
+    [/headspeed/i, /^rpm$/i]
+  )[0] ?? null;
 
-    if (settled && settled > 300) {
-      const reached = headspeed.findIndex(
-        (value) => value >= settled * 0.9
-      );
+const governorTargetColumnName =
+  findColumns(
+    headerLine,
+    [
+      /governorTarget/i,
+      /govTarget/i,
+      /governor/i
+    ]
+  )[0] ?? null;
 
-      if (reached > 0 && reached < headspeed.length * 0.7) {
-        spectrumStart = reached;
-      }
+const alignedTimeMicroseconds =
+  alignedColumnValues(timeColumnName);
+
+const alignedHeadspeed =
+  alignedColumnValues(headspeedColumnName);
+
+const alignedGovernorTarget =
+  alignedColumnValues(
+    governorTargetColumnName
+  );
+
+const firstAlignedTime =
+  alignedTimeMicroseconds.find(
+    Number.isFinite
+  ) ?? 0;
+
+const alignedTimeSeconds =
+  alignedTimeMicroseconds.map((value) =>
+    Number.isFinite(value)
+      ? (
+          value -
+          firstAlignedTime
+        ) / 1_000_000
+      : Number.NaN
+  );
+
+const spectrumFlightPhase =
+  detectStableFlightPhase({
+    timeSeconds: alignedTimeSeconds,
+    headspeed: alignedHeadspeed,
+    governorTarget:
+      alignedGovernorTarget
+  });
+
+const longestSpectrumSegment =
+  spectrumFlightPhase.segments
+    .filter(
+      (segment) =>
+        Number.isInteger(
+          segment.startIndex
+        ) &&
+        segment.sampleCount >=
+          fftWindowSize
+    )
+    .sort(
+      (first, second) =>
+        second.sampleCount -
+        first.sampleCount
+    )[0] ?? null;
+
+const spectrumWindowStart =
+  longestSpectrumSegment
+    ? longestSpectrumSegment.startIndex +
+      Math.floor(
+        (
+          longestSpectrumSegment.sampleCount -
+          fftWindowSize
+        ) / 2
+      )
+    : null;
+
+const buildStableSpectrumSamples =
+  (columnName) => {
+    if (
+      !Number.isInteger(
+        spectrumWindowStart
+      )
+    ) {
+      return [];
     }
-  }
 
-  const spectra = [];
+    const values =
+      alignedColumnValues(columnName)
+        .slice(
+          spectrumWindowStart,
+          spectrumWindowStart +
+            fftWindowSize
+        );
 
-  if (sampleRate) {
-    gyroColumnNames.forEach((name, index) => {
-      const spectrum = computeNoiseSpectrum(
-        columnValues(name).slice(spectrumStart),
-        sampleRate
-      );
+    return (
+      values.length === fftWindowSize &&
+      values.every(Number.isFinite)
+    )
+      ? values
+      : [];
+  };
+
+const spectra = [];
+
+if (
+  sampleRate &&
+  longestSpectrumSegment
+) {
+  gyroColumnNames.forEach(
+    (name, index) => {
+      const spectrum =
+        computeNoiseSpectrum(
+          buildStableSpectrumSamples(name),
+          sampleRate,
+          {
+            segmentSize: fftWindowSize
+          }
+        );
 
       if (spectrum) {
         spectra.push({
           label: name,
           spectrum,
-          color: CHART_COLORS[index % CHART_COLORS.length]
+          color:
+            CHART_COLORS[
+              index %
+                CHART_COLORS.length
+            ]
         });
       }
-    });
-  }
+    }
+  );
+}
+
+ 
 
   const governedHeadspeed = headspeed
     ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
@@ -486,34 +660,46 @@ function buildDataset(lines, pidAnalysis) {
   const filteredColumns = findColumns(headerLine, [/^gyroADC/i]).slice(0, 3);
   let filteredSpectrumStrongest = null;
 
-  if (sampleRate && unfilteredColumns.length > 0 && filteredColumns.length > 0) {
-    // Match the axis of the strongest unfiltered spectrum
-    // so attenuation is measured apples-to-apples.
-    let strongestIndex = 0;
-    let strongestValue = 0;
+  if (
+  sampleRate &&
+  unfilteredColumns.length > 0 &&
+  filteredColumns.length > 0
+) {
+  // Match the axis of the strongest unfiltered spectrum
+  // so attenuation is measured apples-to-apples.
+  let strongestIndex = 0;
+  let strongestValue = 0;
 
-    spectra.forEach((entry, index) => {
-      let peak = 0;
+  spectra.forEach((entry, index) => {
+    let peak = 0;
 
-      for (const value of entry.spectrum.magnitudes) {
-        if (value > peak) {
-          peak = value;
-        }
+    for (const value of entry.spectrum.magnitudes) {
+      if (value > peak) {
+        peak = value;
       }
+    }
 
-      if (peak > strongestValue) {
-        strongestValue = peak;
-        strongestIndex = index;
+    if (peak > strongestValue) {
+      strongestValue = peak;
+      strongestIndex = index;
+    }
+  });
+
+  const filteredName =
+    filteredColumns[strongestIndex] ??
+    filteredColumns[0];
+
+  filteredSpectrumStrongest =
+    computeNoiseSpectrum(
+      buildStableSpectrumSamples(
+        filteredName
+      ),
+      sampleRate,
+      {
+        segmentSize: fftWindowSize
       }
-    });
-
-    const filteredName = filteredColumns[strongestIndex] ?? filteredColumns[0];
-    filteredSpectrumStrongest = computeNoiseSpectrum(
-      columnValues(filteredName).slice(spectrumStart),
-      sampleRate
     );
-  }
-
+}
   const unfilteredSpectrumStrongest = (() => {
     if (spectra.length === 0) {
       return null;
@@ -544,17 +730,31 @@ function buildDataset(lines, pidAnalysis) {
   // ---- labs + verdict ----
   const labs = {
     governor: analyzeGovernorLab({ timeSeconds, headspeed, governorTarget }),
-    esc: analyzeEscLab({ motor, amperage, vbat }),
-    battery: analyzeBatteryLab({ timeSeconds, vbat, amperage })
+    esc: analyzeEscLab({
+  timeSeconds,
+  motor,
+  amperage,
+  vbat,
+  headspeed,
+  governorTarget
+}),
+    battery: analyzeBatteryLab({
+  timeSeconds,
+  vbat,
+  amperage,
+  headspeed,
+  governorTarget
+})
   };
 
   const verdict = buildFlightVerdict({
-    spectra,
-    headspeed,
-    governorTarget,
-    vbat,
-    pidAnalysis
-  });
+  spectra,
+  headspeed,
+  governorTarget,
+  vbat,
+  pidAnalysis,
+  labs
+});
 
   // Evidence that zooms to the moment: attach a focus
   // window (chart + x-range) to the cards that have one.
@@ -1016,7 +1216,7 @@ function renderFilterAdvisor(dataset) {
     filterAdvisorTable.innerHTML = `
       <tr>
         <th>Peak</th><th>Likely source</th><th>Raw</th>
-        <th>After filters</th><th>Removed</th>
+        <th>Filtered peak</th><th>Peak reduction</th>
       </tr>
       ${advice.rows
         .map(
@@ -1116,7 +1316,7 @@ function analyzeFlight(flightIndex) {
     currentDataset?.labs.governor,
     governorStory,
     governorMetrics,
-    "This log has no headspeed/governor data to analyze."
+    "Headspeed data is present, but governor-target telemetry is unavailable. Rotor-speed can still be viewed, but governor tracking and droop cannot be scored."
   );
   renderLab(
     currentDataset?.labs.esc,
@@ -1138,6 +1338,7 @@ function analyzeFlight(flightIndex) {
 
   // ---- file this flight in the craft's health record ----
   if (currentDataset) {
+   
     const craftName = getMetadataValue(currentFlightLines, "Craft name");
 
     const entry = buildHistoryEntry({
@@ -1145,8 +1346,15 @@ function analyzeFlight(flightIndex) {
       flightDateMs: file.lastModified || 0,
       durationSeconds:
         currentDataset.timeSeconds[currentDataset.timeSeconds.length - 1],
-      dataset: currentDataset
-    });
+   dataset: {
+  ...currentDataset,
+  pidScore: Number.isFinite(
+    Number.parseFloat(pidAnalysis?.score)
+  )
+    ? Number.parseFloat(pidAnalysis.score)
+    : currentDataset.pidScore
+}
+});
 
     const craftKey = recordFlight(
       localStorage,

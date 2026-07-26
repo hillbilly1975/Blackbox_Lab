@@ -65,7 +65,10 @@ export function buildHistoryEntry({
     vibrationPeak: peak ? Math.round(peak.magnitude * 10) / 10 : null,
     vibrationHz: peak ? Math.round(peak.hz * 10) / 10 : null,
     droopRpm: dataset.labs?.governor?.droopRpm ?? null,
-    trackingScore: dataset.pidScore ?? null,
+    trackingScore:
+  dataset.pidAnalysis?.score ??
+  dataset.pidScore ??
+  null,
     batterySagPercent: dataset.batterySagPercent ?? null,
     internalResistance: dataset.labs?.battery?.internalResistance ?? null
   };
@@ -73,26 +76,70 @@ export function buildHistoryEntry({
 
 export function recordFlight(storage, craftName, entry) {
   const history = loadHistory(storage);
-  const craftKey = (craftName || "Unknown craft").trim() || "Unknown craft";
+
+const normalizeFileName = (fileName = "") =>
+  String(fileName)
+    .toLowerCase()
+    .replace(/\.bbl\.csv$/, "")
+    .replace(/\.bbl$/, "")
+    .replace(/\.csv$/, "");
+
+let craftKey =
+  (craftName || "Unknown craft").trim() ||
+  "Unknown craft";
+
+// A CSV may not contain the Craft name header.
+// When that happens, attach it to an existing matching
+// BBL flight instead of filing it under Unknown craft.
+if (craftKey === "Unknown craft") {
+  const normalizedIncoming =
+    normalizeFileName(entry.fileName);
+
+  for (const [existingCraft, flights] of Object.entries(
+    history
+  )) {
+    const matchingFlight = flights.find(
+      (flight) =>
+        normalizeFileName(flight.fileName) ===
+        normalizedIncoming
+    );
+
+    if (matchingFlight) {
+      craftKey = existingCraft;
+      break;
+    }
+  }
+}
+
+
+
 
   if (!history[craftKey]) {
     history[craftKey] = [];
   }
 
-  // The same log analyzed twice stays one entry.
   const duplicate = history[craftKey].find(
     (existing) =>
-      existing.fileName === entry.fileName &&
-      existing.durationSeconds === entry.durationSeconds
+      normalizeFileName(existing.fileName) ===
+      normalizeFileName(entry.fileName)
   );
 
   if (duplicate) {
-    Object.assign(duplicate, entry);
+    for (const [key, value] of Object.entries(entry)) {
+      if (value !== null && value !== undefined) {
+        duplicate[key] = value;
+      }
+    }
   } else {
     history[craftKey].push(entry);
-    history[craftKey].sort((a, b) => a.flightDateMs - b.flightDateMs);
+    history[craftKey].sort(
+      (a, b) => a.flightDateMs - b.flightDateMs
+    );
 
-    if (history[craftKey].length > MAXIMUM_FLIGHTS_PER_CRAFT) {
+    if (
+      history[craftKey].length >
+      MAXIMUM_FLIGHTS_PER_CRAFT
+    ) {
       history[craftKey] = history[craftKey].slice(
         -MAXIMUM_FLIGHTS_PER_CRAFT
       );

@@ -8,23 +8,56 @@ function calculateOverallFlightScore(
   profileAnalysis,
   governorAnalysis
 ) {
-  const governorWeight =
-    governorAnalysis.score > 0 ? 0.25 : 0;
+  const scoredSystems = [];
 
-  const baseWeight =
-    1 - governorWeight;
+  if (
+    escAnalysis &&
+    escAnalysis.status !== "Unavailable" &&
+    Number.isFinite(escAnalysis.score)
+  ) {
+    scoredSystems.push({
+      score: escAnalysis.score,
+      weight: 0.5
+    });
+  }
 
-  const weightedScore =
-    escAnalysis.score * (0.50 * baseWeight) +
-    telemetryAnalysis.score * (0.30 * baseWeight) +
-    profileAnalysis.score * (0.20 * baseWeight) +
-    governorAnalysis.score * governorWeight;
+  if (
+    governorAnalysis &&
+    governorAnalysis.status !== "Unavailable" &&
+    governorAnalysis.status !== "No Active Flight Data" &&
+    governorAnalysis.status !== "Target Unavailable" &&
+    Number.isFinite(governorAnalysis.score)
+  ) {
+    scoredSystems.push({
+      score: governorAnalysis.score,
+      weight: 0.25
+    });
+  }
+
+  if (scoredSystems.length === 0) {
+    return null;
+  }
+
+  const totalWeight = scoredSystems.reduce(
+    (sum, system) => sum + system.weight,
+    0
+  );
+
+  const weightedScore = scoredSystems.reduce(
+    (sum, system) =>
+      sum + system.score * (system.weight / totalWeight),
+    0
+  );
 
   return clampScore(weightedScore);
 }
 
 
 function getScoreRating(score) {
+  if (!Number.isFinite(score)) {
+    return "Not Scored";
+  }
+
   if (score >= 95) {
     return "Excellent";
   }
@@ -61,9 +94,15 @@ function getAnalysisConfidence(
     confidencePoints += 25;
   }
 
-  if (governorAnalysis.score > 0) {
-    confidencePoints += 15;
-  }
+  if (
+  governorAnalysis &&
+  governorAnalysis.status !== "Unavailable" &&
+  governorAnalysis.status !== "No Active Flight Data" &&
+  governorAnalysis.status !== "Target Unavailable" &&
+  Number.isFinite(governorAnalysis.score)
+) {
+  confidencePoints += 15;
+}
 
   confidencePoints += telemetryAnalysis.score * 0.30;
 

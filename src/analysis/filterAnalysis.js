@@ -1,7 +1,9 @@
 // ====================================================
 // BLACKBOX LAB - FILTER ANALYSIS
 // ====================================================
-
+import {
+  detectStableFlightPhase
+} from "./flightPhase.js";
 function findMatchingColumns(columns, patterns) {
   if (!Array.isArray(columns)) {
     return [];
@@ -223,6 +225,76 @@ function extractContiguousNumericWindow(
   return values.length === windowSize
     ? values
     : [];
+}
+function extractAlignedNumericColumn(
+  lines,
+  headerIndex,
+  columnPatterns
+) {
+  if (
+    !Array.isArray(lines) ||
+    !Number.isInteger(headerIndex) ||
+    headerIndex < 0 ||
+    !Array.isArray(columnPatterns)
+  ) {
+    return {
+      columnName: null,
+      values: []
+    };
+  }
+
+  const headers = lines[headerIndex]
+    .split(",")
+    .map((header) =>
+      header
+        .trim()
+        .replace(/^"|"$/g, "")
+    );
+
+  const columnIndex = headers.findIndex((header) =>
+    columnPatterns.some((pattern) =>
+      pattern.test(header)
+    )
+  );
+
+  if (columnIndex < 0) {
+    return {
+      columnName: null,
+      values: []
+    };
+  }
+
+  const values = [];
+
+  for (
+    let rowIndex = headerIndex + 1;
+    rowIndex < lines.length;
+    rowIndex += 1
+  ) {
+    const cells = lines[rowIndex].split(",");
+
+    const rawValue =
+  cells[columnIndex]
+    ?.trim()
+    .replace(/^"|"$/g, "") ?? "";
+
+if (rawValue === "") {
+  values.push(null);
+  continue;
+}
+
+const value = Number(rawValue);
+
+values.push(
+  Number.isFinite(value)
+    ? value
+    : null
+);
+  }
+  return {
+    columnName: headers[columnIndex],
+    values
+  };
 }
 function calculateMagnitudeSpectrum(values, sampleRateHz) {
   if (
@@ -652,6 +724,39 @@ const axisErrorColumns = [0, 1, 2].map((axisIndex) =>
   };
 const telemetryHeaderIndex =
   analysisContext.flight?.telemetryHeaderIndex;
+  const timeColumn = extractAlignedNumericColumn(
+  lines,
+  telemetryHeaderIndex,
+  [/^time$/i]
+);
+
+const headspeedColumn = extractAlignedNumericColumn(
+  lines,
+  telemetryHeaderIndex,
+  [/headspeed/i, /^rpm$/i]
+);
+
+const governorTargetColumn = extractAlignedNumericColumn(
+  lines,
+  telemetryHeaderIndex,
+  [/governortarget/i, /govtarget/i]
+);
+
+const firstTimeMicroseconds =
+  timeColumn.values.find(Number.isFinite) ?? 0;
+
+const timeSeconds = timeColumn.values.map((value) =>
+  Number.isFinite(value)
+    ? (value - firstTimeMicroseconds) / 1_000_000
+    : null
+);
+
+const stableFlightPhase = detectStableFlightPhase({
+  timeSeconds,
+  headspeed: headspeedColumn.values,
+  governorTarget: governorTargetColumn.values
+});
+
 const sampleRate =
   estimateSampleRate(
     lines,
@@ -801,10 +906,10 @@ if (controlMotionAxes.length > 0) {
 
     if (highestControlRatio.ratio >= 0.5) {
       controlMotionAssessment =
-        `${highestControlRatio.axis} shows a high control-error ratio, so this profile deserves review for tracking difficulty or possible excessive filtering.`;
+        `${highestControlRatio.axis} shows a high control-error ratio during the available commanded-motion samples. This indicates a tracking concern, but Filter Lab cannot determine by itself whether the cause is filtering, PID balance, mechanics, or the command-event mix. Cross-check PID Lab before changing filter settings.`;
     } else if (highestControlRatio.ratio >= 0.25) {
       controlMotionAssessment =
-        `${highestControlRatio.axis} shows a moderate control-error ratio. Useful commanded motion appears present, but tracking should be monitored.`;
+        `${highestControlRatio.axis} shows a moderate control-error ratio during the available commanded-motion samples. Track this alongside PID Lab and mechanical evidence before attributing it to the filters.`;
     } else {
       controlMotionAssessment =
         "Setpoint and axis-error data indicate that commanded motion is being tracked without obvious evidence of useful control motion being removed.";
@@ -1122,16 +1227,45 @@ const gyroReductionByAxis = rawGyroValues.map(
 );
 const fftWindowSize = 4096;
 
+const longestStableSegment =
+  stableFlightPhase.segments
+    .filter(
+      (segment) =>
+        Number.isInteger(segment.startIndex) &&
+        segment.sampleCount >= fftWindowSize
+    )
+    .sort(
+      (first, second) =>
+        second.sampleCount - first.sampleCount
+    )[0] || null;
+
+const buildStableFftWindow = (columnName) => {
+  if (longestStableSegment) {
+    const centeredOffset =
+      longestStableSegment.startIndex +
+      Math.floor(
+        (
+          longestStableSegment.sampleCount -
+          fftWindowSize
+        ) / 2
+      );
+
+    return extractContiguousNumericWindow(
+      lines,
+      telemetryHeaderIndex,
+      columnName,
+      fftWindowSize,
+      centeredOffset
+    );
+  }
+
+  return [];
+};
 const rawFrequencyWindows =
   rawGyroColumns.slice(0, 3).map(
     (columnName) => ({
       columnName,
-      values: extractContiguousNumericWindow(
-        lines,
-        telemetryHeaderIndex,
-        columnName,
-        fftWindowSize
-      )
+      values: buildStableFftWindow(columnName)
     })
   );
 
@@ -1139,14 +1273,10 @@ const filteredFrequencyWindows =
   filteredGyroColumns.slice(0, 3).map(
     (columnName) => ({
       columnName,
-      values: extractContiguousNumericWindow(
-        lines,
-        telemetryHeaderIndex,
-        columnName,
-        fftWindowSize
-      )
+      values: buildStableFftWindow(columnName)
     })
   );
+  
 const frequencyPeaksByAxis = axisNames.map(
   (axisName, index) => {
     const rawSpectrum =
@@ -1180,6 +1310,12 @@ const frequencyPeaksByAxis = axisNames.map(
     };
   }
 );
+const hasUsableSpectrumEvidence =
+  frequencyPeaksByAxis.some(
+    (entry) =>
+      entry.rawPeak !== null &&
+      entry.rawPeak !== undefined
+  );
 const aircraftFrequencyMatches =
   frequencyPeaksByAxis.map((axisResult) => ({
     axis: axisResult.axis,
@@ -1266,10 +1402,10 @@ for (const profile of profileSpecificFilterAnalysis) {
   
 if (aircraftFrequencyMatches.length > 0) {
  findings.push(
-    `Mechanical-frequency comparisons were completed for ${aircraftFrequencyMatches.length} stable headspeed ${
-      aircraftFrequencyMatches.length === 1 ? "profile" : "profiles"
-    }.`
-  );
+    `Mechanical-frequency comparisons were completed across ${aircraftFrequencyMatches.length} gyro ${
+  aircraftFrequencyMatches.length === 1 ? "axis" : "axes"
+} using one continuous stable governed-flight FFT window.`
+ );
 }
   if (rawGyroColumns.length > 0) {
     findings.push(
@@ -1360,11 +1496,19 @@ let unmatchedFilteredPeakCount = 0;
         `${filteredMatch.targetRpm ?? Math.round(filteredMatch.averageRpm)} RPM ` +
         `within ${filteredMatch.differenceHz.toFixed(2)} Hz.`
       );
-    }else if (filteredMatch) {
+    } else if (filteredMatch) {
   unmatchedFilteredPeakCount += 1;
+
+  findings.push(
+    `${axisMatch.axis} filtered peak at ` +
+    `${filteredMatch.peakFrequencyHz.toFixed(2)} Hz did not match a known ` +
+    `aircraft frequency within tolerance. Closest was ` +
+    `${filteredMatch.frequencyName} at ` +
+    `${filteredMatch.expectedFrequencyHz.toFixed(2)} Hz, ` +
+    `${filteredMatch.differenceHz.toFixed(2)} Hz away.`
+  );
 }
 }
- 
 if (aircraftFrequencyMatches.length > 0) {
   if (matchedMechanicalPeakCount === 0 && unmatchedMechanicalPeakCount > 0) {
   summaryFindings.push(
@@ -1401,7 +1545,7 @@ summaryFindings.push(
 );
 
 summaryFindings.push(
-  `Filtered mechanical-frequency peaks: ${matchedFilteredPeakCount} matched known aircraft frequencies and ${unmatchedFilteredPeakCount} were outside tolerance.`
+  `Filtered residual peaks: ${matchedFilteredPeakCount} aligned with known aircraft frequencies and ${unmatchedFilteredPeakCount} did not align. Unmatched filtered residuals are not automatically faults; they may simply be the strongest low-level frequencies remaining after the original mechanical peaks were suppressed.`
 );
 }
 
@@ -1412,9 +1556,9 @@ findings.push(
 );
 
 findings.push(
-  `Filtered mechanical-frequency evidence: ` +
-  `${matchedFilteredPeakCount} matched and ` +
-  `${unmatchedFilteredPeakCount} outside tolerance.`
+  `Filtered residual-frequency evidence: ` +
+  `${matchedFilteredPeakCount} aligned with known aircraft frequencies and ` +
+  `${unmatchedFilteredPeakCount} remained unmatched after filtering.`
 );
  evidence.push({
   source: "Mechanical Frequency Match Counts",
@@ -1433,6 +1577,12 @@ findings.push(
   }
 }
  });
+ const hasStableProfileEvidence =
+  profileSpecificFilterAnalysis.length > 0;
+
+const hasSufficientFilterEvidence =
+  hasUsableSpectrumEvidence ||
+  hasStableProfileEvidence;
   const dataCompletenessScore = Math.round(
   (detectedGroupCount / 5) * 100
 );
@@ -1452,40 +1602,66 @@ const profileResultPenalty =
     return totalPenalty;
   }, 0);
 
-const score = Math.max(
-  0,
-  Math.min(100, dataCompletenessScore - profileResultPenalty)
-);
+const score =
+  hasSufficientFilterEvidence
+    ? Math.max(
+        0,
+        Math.min(
+          100,
+          dataCompletenessScore -
+            profileResultPenalty
+        )
+      )
+    : null;
   let status = "Insufficient Data";
-  let severity = "warning";
+let severity = "warning";
 
-  if (detectedGroupCount === 5) {
+if (!hasSufficientFilterEvidence) {
+  status =
+    "Filter Analysis Limited — Insufficient Evidence";
+  severity = "warning";
+} else if (detectedGroupCount === 5) {
   if (score >= 95) {
     status = "Filter Analysis Complete";
     severity = "info";
   } else if (score >= 80) {
-    status = "Filter Analysis Complete — Monitor";
+    status =
+      "Filter Analysis Complete — Monitor";
     severity = "warning";
   } else {
-    status = "Filter Analysis Complete — Needs Review";
+    status =
+      "Filter Analysis Complete — Needs Review";
     severity = "warning";
   }
 } else if (detectedGroupCount >= 3) {
-    status = "Partial Column Detection";
-    severity = "warning";
-  }
+  status = "Partial Column Detection";
+  severity = "warning";
+}
+   
+  
 
-  const confidenceScore = hasBlackboxLog
-    ? Math.min(100, 20 + detectedGroupCount * 16)
-    : detectedGroupCount * 10;
+  const confidenceScore =
+  hasSufficientFilterEvidence
+    ? hasBlackboxLog
+      ? Math.min(
+          100,
+          20 + detectedGroupCount * 16
+        )
+      : detectedGroupCount * 10
+    : 0;
 
-  let confidenceLabel = "Low";
+let confidenceLabel =
+  hasSufficientFilterEvidence
+    ? "Low"
+    : "Insufficient";
 
+if (hasSufficientFilterEvidence) {
   if (confidenceScore >= 80) {
     confidenceLabel = "High";
   } else if (confidenceScore >= 45) {
     confidenceLabel = "Moderate";
   }
+}
 
   const recommendations = [];
 

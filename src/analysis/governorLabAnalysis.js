@@ -2,87 +2,244 @@
 // BLACKBOX LAB — GOVERNOR LAB ANALYSIS
 // ======================================================
 //
-// How well did the governor hold rotor speed? Judged only
-// on the governed part of the flight (spool-up excluded).
+// Charts may show the complete recording.
+//
+// Governor scoring uses only stable governed-flight
+// samples detected by the shared flight-phase module.
+// Spool-up, spool-down and headspeed transitions are
+// excluded from the calculations.
 //
 // ======================================================
 
-export function analyzeGovernorLab({ timeSeconds, headspeed, governorTarget }) {
-  if (!headspeed || headspeed.length < 100) {
+import {
+  detectStableFlightPhase
+} from "./flightPhase.js";
+
+export function analyzeGovernorLab({
+  timeSeconds,
+  headspeed,
+  governorTarget
+}) {
+  if (
+    !Array.isArray(timeSeconds) ||
+    !Array.isArray(headspeed) ||
+    !Array.isArray(governorTarget) ||
+    headspeed.length < 100
+  ) {
     return null;
   }
+if (
+  !Array.isArray(timeSeconds) ||
+  !Array.isArray(headspeed) ||
+  headspeed.length < 100
+) {
+  return null;
+}
 
-  const governed = [];
+if (
+  !Array.isArray(governorTarget) ||
+  governorTarget.length < 100
+) {
+  return {
+    score: null,
+    status: "Target Unavailable",
+    story:
+      "Headspeed data is present, but governor-target telemetry is unavailable. Rotor-speed stability can be viewed, but governor tracking and droop cannot be scored.",
+    droopRpm: null,
+    droopPercent: null,
+    droopTimeSeconds: null,
+    averageHeadspeed: null,
+    stableSampleCount: 0,
+    stableSegments: [],
+    metrics: []
+  };
+}
+  const flightPhase = detectStableFlightPhase({
+    timeSeconds,
+    headspeed,
+    governorTarget
+  });
 
-  for (let i = 0; i < headspeed.length; i += 1) {
-    const target = governorTarget ? governorTarget[i] : null;
+  const stableIndexes = flightPhase.stableIndexes;
 
-    if (target && target > 300 && headspeed[i] > target * 0.85) {
-      governed.push({
-        time: timeSeconds[i],
-        actual: headspeed[i],
-        target
-      });
-    }
+  if (
+    !Array.isArray(stableIndexes) ||
+    stableIndexes.length < 100
+  ) {
+    return {
+      score: null,
+      status: "insufficient",
+      story:
+        "No stable governed-flight section was long enough for a reliable governor assessment.",
+      droopRpm: null,
+      droopPercent: null,
+      droopTimeSeconds: null,
+      averageHeadspeed: null,
+      stableSampleCount:
+        flightPhase.stableSampleCount ?? 0,
+      stableSegments:
+        flightPhase.segments ?? [],
+      metrics: [
+        {
+          label: "Stable samples",
+          value: String(
+            flightPhase.stableSampleCount ?? 0
+          )
+        },
+        {
+          label: "Governor result",
+          value: "Insufficient stable-flight data"
+        }
+      ]
+    };
   }
 
-  if (governed.length < 100) {
-    return null;
-  }
-
-  let averageTarget = 0;
-  let averageActual = 0;
+  let targetSum = 0;
+  let actualSum = 0;
   let maximumDroop = 0;
-  let droopTime = 0;
+  let droopTime = null;
   let squaredErrorSum = 0;
+  let validSampleCount = 0;
 
-  for (const sample of governed) {
-    averageTarget += sample.target;
-    averageActual += sample.actual;
+  for (const index of stableIndexes) {
+    const actual = Number(headspeed[index]);
+    const target = Number(governorTarget[index]);
+    const time = Number(timeSeconds[index]);
 
-    const droop = sample.target - sample.actual;
-    squaredErrorSum += droop * droop;
-
-    if (droop > maximumDroop) {
-      maximumDroop = droop;
-      droopTime = sample.time;
+    if (
+      !Number.isFinite(actual) ||
+      !Number.isFinite(target) ||
+      target <= 0
+    ) {
+      continue;
     }
+
+    targetSum += target;
+    actualSum += actual;
+
+    const trackingError = target - actual;
+    squaredErrorSum += trackingError * trackingError;
+
+    if (trackingError > maximumDroop) {
+      maximumDroop = trackingError;
+      droopTime =
+        Number.isFinite(time) ? time : null;
+    }
+
+    validSampleCount += 1;
   }
 
-  averageTarget /= governed.length;
-  averageActual /= governed.length;
+  if (validSampleCount < 100) {
+    return null;
+  }
 
-  const rmsError = Math.sqrt(squaredErrorSum / governed.length);
-  const droopPercent = (maximumDroop / averageTarget) * 100;
+  const averageTarget =
+    targetSum / validSampleCount;
+
+  const averageActual =
+    actualSum / validSampleCount;
+
+  const rmsError = Math.sqrt(
+    squaredErrorSum / validSampleCount
+  );
+
+  const droopPercent =
+    averageTarget > 0
+      ? (maximumDroop / averageTarget) * 100
+      : 0;
 
   const score = Math.max(
     0,
-    Math.min(100, Math.round(100 - droopPercent * 12 - rmsError * 0.5))
+    Math.min(
+      100,
+      Math.round(
+        100 -
+          droopPercent * 12 -
+          rmsError * 0.5
+      )
+    )
   );
 
   const status =
-    droopPercent > 3 ? "attention" : droopPercent > 1.2 ? "watch" : "good";
+    droopPercent > 3
+      ? "attention"
+      : droopPercent > 1.2
+        ? "watch"
+        : "good";
+
+  const droopTimeText =
+    Number.isFinite(droopTime)
+      ? ` at ${droopTime.toFixed(1)} s`
+      : "";
 
   const story =
     status === "good"
-      ? `Excellent hold: average headspeed ${Math.round(averageActual)} rpm against a ${Math.round(averageTarget)} rpm target, worst droop only ${Math.round(maximumDroop)} rpm.`
+      ? `Excellent stable-flight hold: average headspeed ${Math.round(
+          averageActual
+        )} rpm against a ${Math.round(
+          averageTarget
+        )} rpm target. Largest observed tracking dip was ${Math.round(
+          maximumDroop
+        )} rpm.`
       : status === "watch"
-        ? `Decent hold with visible dips: worst droop ${Math.round(maximumDroop)} rpm (${droopPercent.toFixed(1)}%) at ${droopTime.toFixed(1)} s — zoom the chart there to see it.`
-        : `The governor loses ${Math.round(maximumDroop)} rpm (${droopPercent.toFixed(1)}%) under load at ${droopTime.toFixed(1)} s. More governor gain — or more power-system headroom — would tighten this.`;
+        ? `Stable-flight tracking showed a largest dip of ${Math.round(
+            maximumDroop
+          )} rpm (${droopPercent.toFixed(
+            1
+          )}%)${droopTimeText}. Review the chart before changing governor settings.`
+        : `Stable-flight tracking showed a largest dip of ${Math.round(
+            maximumDroop
+          )} rpm (${droopPercent.toFixed(
+            1
+          )}%)${droopTimeText}. Confirm that this occurred during a real airborne load event before changing governor gain.`;
 
   return {
     score,
     status,
     story,
-    droopRpm: Math.round(maximumDroop * 10) / 10,
-    droopPercent: Math.round(droopPercent * 100) / 100,
-    droopTimeSeconds: Math.round(droopTime * 100) / 100,
-    averageHeadspeed: Math.round(averageActual),
+
+    droopRpm:
+      Math.round(maximumDroop * 10) / 10,
+
+    droopPercent:
+      Math.round(droopPercent * 100) / 100,
+
+    droopTimeSeconds:
+      Number.isFinite(droopTime)
+        ? Math.round(droopTime * 100) / 100
+        : null,
+
+    averageHeadspeed:
+      Math.round(averageActual),
+
+    stableSampleCount: validSampleCount,
+
+    stableSegments:
+      flightPhase.segments ?? [],
+
     metrics: [
-      { label: "Average headspeed", value: `${Math.round(averageActual)} rpm` },
-      { label: "Target", value: `${Math.round(averageTarget)} rpm` },
-      { label: "Worst droop", value: `${Math.round(maximumDroop)} rpm (${droopPercent.toFixed(1)}%)` },
-      { label: "RMS tracking error", value: `${rmsError.toFixed(1)} rpm` }
+      {
+        label: "Average headspeed",
+        value: `${Math.round(averageActual)} rpm`
+      },
+      {
+        label: "Target",
+        value: `${Math.round(averageTarget)} rpm`
+      },
+      {
+        label: "Largest stable-flight dip",
+        value: `${Math.round(
+          maximumDroop
+        )} rpm (${droopPercent.toFixed(1)}%)`
+      },
+      {
+        label: "RMS tracking error",
+        value: `${rmsError.toFixed(1)} rpm`
+      },
+      {
+        label: "Stable samples used",
+        value: validSampleCount.toLocaleString()
+      }
     ]
   };
 }

@@ -27,7 +27,48 @@ function findPeaks(spectrum, minimumHz = 10, count = 5) {
       magnitudes[i] > magnitudes[i + 1] &&
       magnitudes[i] > 1
     ) {
-      peaks.push({ hz: frequencies[i], magnitude: magnitudes[i], bin: i });
+      const nearbyMagnitudes = [];
+
+for (
+  let nearbyIndex = Math.max(0, i - 8);
+  nearbyIndex <= Math.min(magnitudes.length - 1, i + 8);
+  nearbyIndex += 1
+) {
+  if (Math.abs(nearbyIndex - i) <= 1) {
+    continue;
+  }
+
+  const nearbyMagnitude =
+    magnitudes[nearbyIndex];
+
+  if (Number.isFinite(nearbyMagnitude)) {
+    nearbyMagnitudes.push(
+      nearbyMagnitude
+    );
+  }
+}
+
+const localNoiseFloor =
+  nearbyMagnitudes.length > 0
+    ? nearbyMagnitudes.reduce(
+        (sum, value) => sum + value,
+        0
+      ) / nearbyMagnitudes.length
+    : 0;
+
+const prominenceRatio =
+  localNoiseFloor > 0 &&
+  Number.isFinite(magnitudes[i])
+    ? magnitudes[i] / localNoiseFloor
+    : null;
+
+peaks.push({
+  hz: frequencies[i],
+  magnitude: magnitudes[i],
+  bin: i,
+  localNoiseFloor,
+  prominenceRatio
+});
     }
   }
 
@@ -137,6 +178,7 @@ export function adviseFilters({
       magnitude: Math.round(peak.magnitude * 10) / 10,
       source: classified.source,
       rpmLinked: classified.rpmLinked,
+      prominenceRatio: peak.prominenceRatio,
       filteredMagnitude:
         filteredMagnitude !== null
           ? Math.round(filteredMagnitude * 10) / 10
@@ -147,20 +189,32 @@ export function adviseFilters({
   });
 
   const recommendations = [];
-  const biggest = rows[0];
+const biggest = rows[0];
+const isStrongProminentPeak =
+  Number.isFinite(
+    biggest?.prominenceRatio
+  ) &&
+  biggest.prominenceRatio >= 20;
 
-  // ---- mechanics before filters ----
-  if (biggest.magnitude > 8) {
-    recommendations.push({
-      priority: "first",
-      text: `Your biggest peak (${biggest.magnitude} at ${biggest.hz} Hz, ${biggest.source}) is strong enough that filtering is the wrong first move — fix the mechanics (balance, damping, bearings), then re-log. Filters hide vibration from the gyro; the airframe still shakes.`
-    });
-  }
 
-  // ---- rpm-linked peaks → Rotorflight's rpm filter ----
-  const rpmLinkedRows = rows.filter(
-    (row) => row.rpmLinked && row.magnitude > 2
-  );
+
+
+// ---- mechanics before filters ----
+if (isStrongProminentPeak) {
+  recommendations.push({
+    priority: "first",
+    text: `Your biggest peak (${biggest.magnitude} at ${biggest.hz} Hz, ${biggest.source}) is highly prominent compared with its nearby noise floor. Check the mechanics first — blade balance and tracking, head damping, bearings, shafts, and mounting — then re-log before changing filter settings. Filters can suppress what the gyro sees, but they do not remove the physical vibration from the airframe.`
+  });
+}
+
+
+// ---- rpm-linked peaks → Rotorflight's rpm filter ----
+const rpmLinkedRows = rows.filter(
+  (row) =>
+    row.rpmLinked &&
+    row.magnitude > 2
+);
+  
 
   if (rpmLinkedRows.length > 0 && headspeedRpm) {
     const list = rpmLinkedRows
@@ -195,19 +249,26 @@ export function adviseFilters({
     });
   }
 
-  // ---- possible over-filtering ----
-  const allWellAttenuated =
-    rows.every(
-      (row) =>
-        row.reductionPercent === null || row.reductionPercent > 95
-    ) && biggest.magnitude < 5;
+  // ---- strong attenuation of detected peaks ----
+const allDetectedPeaksStronglyAttenuated =
+  rows.length > 0 &&
+  rows.every(
+    (row) =>
+      Number.isFinite(row.reductionPercent) &&
+      row.reductionPercent > 95
+  ) &&
+  biggest.magnitude < 5;
 
-  if (allWellAttenuated && filteredSpectrum) {
-    recommendations.push({
-      priority: "gentle",
-      text: "Everything is filtered to near-zero and the raw signal is already quiet — you may be paying latency for filtering you don't need. Cautiously raising the gyro lowpass cutoff could sharpen response. One step at a time, and compare flights afterwards."
-    });
-  }
+if (
+  allDetectedPeaksStronglyAttenuated &&
+  filteredSpectrum
+) {
+  recommendations.push({
+    priority: "gentle",
+    text:
+      "The isolated vibration peaks detected here are strongly attenuated and the raw peak magnitudes are modest. This confirms effective suppression of those specific frequencies, but it does not by itself prove that the overall filter setup is excessive. Review the broader gyro averages, control tracking, and PID evidence before changing filter cutoffs."
+  });
+}
 
   if (recommendations.length === 0) {
     recommendations.push({
@@ -217,8 +278,8 @@ export function adviseFilters({
   }
 
   const story = filteredSpectrum
-    ? `Found ${rows.length} vibration peak(s). The table shows each one's likely source and how much of it your current filters actually remove — measured from this very flight.`
-    : `Found ${rows.length} vibration peak(s) in the unfiltered gyro. This log doesn't include the filtered gyro trace, so filter effectiveness can't be measured — the sources and sizes below still tell the mechanical story.`;
+  ? `Found ${rows.length} vibration peak(s). The table shows each peak's likely source and how much that exact frequency peak is reduced after filtering. This does not mean the helicopter's overall vibration is reduced by the same percentage.`
+  : `Found ${rows.length} vibration peak(s) in the unfiltered gyro. This log doesn't include the filtered gyro trace, so filter effectiveness cannot be measured.`;
 
   return { story, rows, recommendations };
 }

@@ -4,6 +4,9 @@ import {
   calculateAverageAbsolute
 } from "./mathHelpers.js";
 
+import {
+  detectStableFlightPhase
+} from "./flightPhase.js";
 function findMatchingColumns(columns, searchTerms) {
   if (!Array.isArray(columns)) {
     return [];
@@ -77,6 +80,17 @@ const axisSetpointColumns =
       String(columnName).trim()
     )
   );
+  const filteredGyroColumns = findMatchingColumns(
+  allColumns,
+  [
+    "gyroadc",
+    "gyrofiltered"
+  ]
+).filter((columnName) =>
+  /^gyroADC\[[0-2]\]$/i.test(
+    String(columnName).trim()
+  )
+);
   const axisErrorColumns = findMatchingColumns(
     allColumns,
     [
@@ -87,28 +101,142 @@ const axisSetpointColumns =
 
 const telemetryHeaderIndex =
   analysisContext?.flight?.telemetryHeaderIndex ?? -1;
+  const stableRowIndexes = [
+  ...new Set(
+    headspeedProfiles.flatMap(
+      (profile) =>
+        Array.isArray(profile.sampleIndexes)
+          ? profile.sampleIndexes
+          : []
+    )
+  )
+]
+  .filter(Number.isInteger)
+  .sort((first, second) => first - second);
 
- 
+const hasStableFlightRows =
+  stableRowIndexes.length > 0;
+  const stableRowSegments = [];
+
+for (const rowIndex of stableRowIndexes) {
+  const currentSegment =
+    stableRowSegments[
+      stableRowSegments.length - 1
+    ];
+
+  const previousRowIndex =
+    currentSegment?.[
+      currentSegment.length - 1
+    ];
+
+  if (
+    !currentSegment ||
+    rowIndex !== previousRowIndex + 1
+  ) {
+   stableRowSegments.push([rowIndex]);
+  } else {
+    currentSegment.push(rowIndex);
+  }
+}
+
+ const stableArraySegments = [];
+
+let stableArrayOffset = 0;
+
+for (const rowSegment of stableRowSegments) {
+  const segmentLength = rowSegment.length;
+
+  if (segmentLength <= 0) {
+    continue;
+  }
+
+  stableArraySegments.push({
+    startIndex: stableArrayOffset,
+    endIndex:
+      stableArrayOffset +
+      segmentLength -
+      1,
+    sampleCount: segmentLength
+  });
+
+  stableArrayOffset += segmentLength;
+}
 
      
-const axisErrorValues =
+const recordedAxisErrorValues =
   axisErrorColumns.map((columnName) => ({
     columnName,
-    values: getColumnValues(
-      lines,
-      telemetryHeaderIndex,
-      columnName
-    )
+    values: hasStableFlightRows
+      ? getColumnValuesByRowIndexes(
+          lines,
+          telemetryHeaderIndex,
+          columnName,
+          stableRowIndexes
+        )
+      : []
   }));
-  const axisSetpointValues =
+const axisSetpointValues =
   axisSetpointColumns.map((columnName) => ({
     columnName,
-    values: getColumnValues(
+    values: hasStableFlightRows
+  ? getColumnValuesByRowIndexes(
       lines,
       telemetryHeaderIndex,
-      columnName
+      columnName,
+      stableRowIndexes
     )
+  : []
   }));
+const filteredGyroValues =
+  filteredGyroColumns.map((columnName) => ({
+    columnName,
+    values: hasStableFlightRows
+      ? getColumnValuesByRowIndexes(
+          lines,
+          telemetryHeaderIndex,
+          columnName,
+          stableRowIndexes
+        )
+      : []
+  }));
+ 
+const axisErrorValues =
+  recordedAxisErrorValues.length === 3
+    ? recordedAxisErrorValues
+    : axisSetpointValues.map((setpointResult, index) => {
+        const gyroResult = filteredGyroValues[index];
+
+        if (!gyroResult) {
+          return {
+            columnName: `derivedAxisError[${index}]`,
+            values: []
+          };
+        }
+
+        const sampleCount = Math.min(
+          setpointResult.values.length,
+          gyroResult.values.length
+        );
+
+        const values = [];
+
+        for (
+          let sampleIndex = 0;
+          sampleIndex < sampleCount;
+          sampleIndex += 1
+        ) {
+          values.push(
+            setpointResult.values[sampleIndex] -
+              gyroResult.values[sampleIndex]
+          );
+        }
+
+        return {
+          columnName: `derivedAxisError[${index}]`,
+          values
+        };
+      });
+ 
   const axisNames = [
   "Roll",
   "Pitch",
@@ -220,15 +348,25 @@ exceedancePercent: null
   axisSetpointValues.map((setpointResult, axisIndex) => {
     const events = [];
     const values = setpointResult.values;
-let lastAcceptedEventIndex =
-  Number.NEGATIVE_INFINITY;
 
-const minimumEventSpacing = 50;
-    for (
-      let sampleIndex = 20;
-      sampleIndex < values.length;
-      sampleIndex += 1
-    ) {
+    const minimumEventSpacing = 50;
+
+    for (const stableSegment of stableArraySegments) {
+      const segmentStart =
+        stableSegment.startIndex;
+
+      const segmentEnd =
+        stableSegment.endIndex;
+
+      let lastAcceptedEventIndex =
+        Number.NEGATIVE_INFINITY;
+
+      for (
+        let sampleIndex =
+          Math.max(segmentStart + 20, 20);
+        sampleIndex <= segmentEnd;
+        sampleIndex += 1
+      ) {
       const previousValue = values[sampleIndex - 20];
       const currentValue = values[sampleIndex];
 
@@ -286,16 +424,50 @@ for (
 
 const commandTarget =
   values[commandEndSampleIndex];
+
 const responseResult =
   reconstructedAxisResponse[axisIndex];
+
 const responseWindowStart =
   commandEndSampleIndex;
 
-const responseWindowEnd =
+const maximumResponseWindowEnd =
   Math.min(
     responseWindowStart + 200,
+    values.length,
     responseResult?.values.length ?? 0
   );
+
+let nextCommandSampleIndex = null;
+
+for (
+  let lookAheadIndex =
+    responseWindowStart + 1;
+  lookAheadIndex <
+  maximumResponseWindowEnd;
+  lookAheadIndex += 1
+) {
+  const lookAheadValue =
+    values[lookAheadIndex];
+
+  if (
+    Number.isFinite(lookAheadValue) &&
+    Number.isFinite(commandTarget) &&
+    Math.abs(
+      lookAheadValue - commandTarget
+    ) >= 5
+  ) {
+    nextCommandSampleIndex =
+      lookAheadIndex;
+
+    break;
+  }
+}
+
+const responseWindowEnd =
+  Number.isInteger(nextCommandSampleIndex)
+    ? nextCommandSampleIndex
+    : maximumResponseWindowEnd;
 const commandWindow =
   values.slice(
     responseWindowStart,
@@ -369,8 +541,13 @@ const crossedCommandTarget =
       ? responsePeak > commandTarget
       : responsePeak < commandTarget
   );
-const commandedResponseChange =
-  commandTarget - previousValue;
+const commandMagnitude =
+  Number.isFinite(commandTarget) &&
+  Number.isFinite(previousValue)
+    ? Math.abs(
+        commandTarget - previousValue
+      )
+    : null;
 
 const overshootAmount =
   !hasOverlappingCommand &&
@@ -385,10 +562,11 @@ const overshootAmount =
 
 const overshootPercent =
   Number.isFinite(overshootAmount) &&
-  Math.abs(commandedResponseChange) >= 10
+  Number.isFinite(commandMagnitude) &&
+  commandMagnitude >= 10
     ? (
         overshootAmount /
-        Math.abs(commandedResponseChange)
+        commandMagnitude
       ) * 100
     : null;
     const bounceBackWindowStart =
@@ -449,10 +627,11 @@ const bounceBackAmount =
   hasSufficientBounceBackWindow &&
   responseReachedTarget &&
   Number.isFinite(bounceBackAmount) &&
-  Math.abs(commandedResponseChange) >= 10
+  Number.isFinite(commandMagnitude) &&
+  commandMagnitude >= 10
     ? (
         bounceBackAmount /
-        Math.abs(commandedResponseChange)
+        commandMagnitude
       ) * 100
     : null;
     const bounceBackEligible =
@@ -460,10 +639,10 @@ const bounceBackAmount =
   responseReachedTarget &&
   Number.isFinite(bounceBackPercent);
   const settlingTolerance =
-  Number.isFinite(commandedResponseChange)
+  Number.isFinite(commandMagnitude)
     ? Math.max(
         2,
-        Math.abs(commandedResponseChange) * 0.1
+        commandMagnitude * 0.1
       )
     : null;
     const settlingInToleranceFlags =
@@ -518,7 +697,8 @@ for (
   const settlingEligible =
   !hasOverlappingCommand &&
   settlingDetected &&
-  Math.abs(commandedResponseChange) >= 10;
+  Number.isFinite(commandMagnitude) &&
+  commandMagnitude >= 10;
   const ringingErrorWindow =
   Number.isFinite(commandTarget)
     ? bounceBackWindow.map((value) =>
@@ -571,7 +751,8 @@ const hasSufficientRingingWindow =
   const ringingEligible =
   !hasOverlappingCommand &&
   hasSufficientRingingWindow &&
-  Math.abs(commandedResponseChange) >= 10;
+ Number.isFinite(commandMagnitude) &&
+commandMagnitude >= 10
 
 
 events.push({
@@ -582,7 +763,7 @@ commandTarget,
   previousSetpoint: previousValue,
   currentSetpoint: currentValue,
   commandChange,
-  commandedResponseChange,
+  commandMagnitude,
 commandDirection,
 responsePeakInCommandDirection,
 overshootAmount,
@@ -618,7 +799,7 @@ ringingEligible,
 responsePeakOffset,
 responsePeakSampleIndex
 });
-
+      }
     }
     return {
       axis: axisNames[axisIndex] ?? `Axis ${axisIndex}`,
@@ -629,23 +810,74 @@ responsePeakSampleIndex
 const profileTrackingAnalysis =
   headspeedProfiles.map((profile) => {
     const axisResults =
-      axisErrorColumns.map((columnName, index) => {
-        const values =
-          getColumnValuesByRowIndexes(
-            lines,
-            telemetryHeaderIndex,
-            columnName,
-            profile.sampleIndexes
-          );
+  axisSetpointColumns.map((setpointColumnName, index) => {
+    const profileRowIndexes =
+      Array.isArray(profile.sampleIndexes)
+        ? profile.sampleIndexes
+        : [];
 
-        return {
-          axis: axisNames[index] ?? `Axis ${index}`,
-          columnName,
-          sampleCount: values.length,
-          averageAbsoluteError:
-            calculateAverageAbsolute(values)
-        };
-      });
+    const setpointValues =
+      getColumnValuesByRowIndexes(
+        lines,
+        telemetryHeaderIndex,
+        setpointColumnName,
+        profileRowIndexes
+      );
+
+    const recordedErrorColumnName =
+      axisErrorColumns[index];
+
+    const filteredGyroColumnName =
+      filteredGyroColumns[index];
+
+    let values = [];
+
+    if (recordedErrorColumnName) {
+      values =
+        getColumnValuesByRowIndexes(
+          lines,
+          telemetryHeaderIndex,
+          recordedErrorColumnName,
+          profileRowIndexes
+        );
+    } else if (filteredGyroColumnName) {
+      const gyroValues =
+        getColumnValuesByRowIndexes(
+          lines,
+          telemetryHeaderIndex,
+          filteredGyroColumnName,
+          profileRowIndexes
+        );
+
+      const sampleCount = Math.min(
+        setpointValues.length,
+        gyroValues.length
+      );
+
+      for (
+        let sampleIndex = 0;
+        sampleIndex < sampleCount;
+        sampleIndex += 1
+      ) {
+        values.push(
+          setpointValues[sampleIndex] -
+            gyroValues[sampleIndex]
+        );
+      }
+    }
+
+    return {
+      axis: axisNames[index] ?? `Axis ${index}`,
+      columnName:
+        recordedErrorColumnName ??
+        `derivedAxisError[${index}]`,
+      sampleCount: values.length,
+      averageAbsoluteError:
+        calculateAverageAbsolute(values)
+    };
+  });
+
+        
 
     const validAxisErrors =
   axisResults
@@ -1449,9 +1681,11 @@ const confidenceLevel =
     },
     null
   );
+   
   const pidCommandBalanceAssessment =
   pidCommandTermContributionPercentages.map(
     (axisResult) => {
+    
       const hasUsableContributionData =
         axisResult.commandWindowCount >= 3 &&
         Number.isFinite(axisResult.iPercent) &&
@@ -1473,13 +1707,13 @@ const confidenceLevel =
         35;
 
       const status =
-        !hasUsableContributionData
-          ? "Insufficient Data"
-          : isHighestTrackingErrorAxis &&
-              iRemainsDominantDuringCommands &&
-              commandSupportIsLow
-            ? "Review"
-            : "Clear";
+  !hasUsableContributionData
+    ? "Insufficient Data"
+    : isHighestTrackingErrorAxis &&
+        iRemainsDominantDuringCommands &&
+        commandSupportIsLow
+      ? "Review"
+      : "Clear";
 
       return {
         axis: axisResult.axis,
@@ -1531,12 +1765,18 @@ const pidSummary = [
     ? `${bestTrackingProfile.targetRpm} RPM produced the lowest overall tracking error.`
     : "A best tracking profile could not be identified."
 ];
+const hasCompleteTrackingEvidence =
+  validAxisCount === 3 &&
+  highestTrackingErrorAxis !== null;
+
 const pidOverallStatus =
-  saturationReviewTerms.length > 0
-    ? "Review"
-    : commandBalanceReviewAxes.length > 0
+  !hasCompleteTrackingEvidence
+    ? "Insufficient Data"
+    : saturationReviewTerms.length > 0
       ? "Review"
-      : "Clear";
+      : commandBalanceReviewAxes.length > 0
+        ? "Review"
+        : "Clear";
       const pidScoreDeductions = {
   commandBalance:
     Math.min(
@@ -1557,15 +1797,20 @@ realWorldMargin: 2,
     
 };
 
-const pidScore = Math.max(
-  0,
-  100 -
-    pidScoreDeductions.commandBalance -
-    pidScoreDeductions.saturation -
-    pidScoreDeductions.realWorldMargin -
-    pidScoreDeductions.incompleteTracking -
-    pidScoreDeductions.incompleteProfileComparison
-);
+
+
+const pidScore =
+  hasCompleteTrackingEvidence
+    ? Math.max(
+        0,
+        100 -
+          pidScoreDeductions.commandBalance -
+          pidScoreDeductions.saturation -
+          pidScoreDeductions.realWorldMargin -
+          pidScoreDeductions.incompleteTracking -
+          pidScoreDeductions.incompleteProfileComparison
+      )
+    : null;
 const pidScoreExplanation = [
   `${pidScoreDeductions.realWorldMargin} points are reserved because one real-world flight cannot prove a mathematically perfect PID tune.`,
   commandBalanceReviewAxes.length > 0
@@ -1587,11 +1832,15 @@ const pidScoreExplanation = [
   : "Profile comparison was not available and did not affect the PID score."
 ];
   return {
-    status: "PID Tracking Analysis Complete",
+    status: hasCompleteTrackingEvidence
+  ? "PID Tracking Analysis Complete"
+  : "PID Tracking Analysis Unavailable",
     summary: pidSummary,
     overallStatus: pidOverallStatus,
     score: pidScore,
-    scoreExplanation: pidScoreExplanation,
+    scoreExplanation: hasCompleteTrackingEvidence
+  ? pidScoreExplanation
+  : [],
     technicalSummary: {
   highestTrackingErrorAxis:
     highestTrackingErrorAxis?.axis ?? null,
@@ -1628,16 +1877,23 @@ const pidScoreExplanation = [
 })
 },
     
-    confidence: {
-  level: confidenceLevel,
-  score: confidenceScore,
-  
-},
+  confidence: hasCompleteTrackingEvidence
+  ? {
+      level: confidenceLevel,
+      score: confidenceScore
+    }
+  : {
+      level: "Insufficient",
+      score: 0
+    },
 
     findings: [
       `Axis setpoint columns detected: ${axisSetpointColumns.length}`,
-      `Axis-error columns detected: ${axisErrorColumns.length}`,
-      `Axis-error column names: ${axisErrorColumns.join(", ")}`,
+      axisErrorColumns.length === 3
+  ? `Tracking-error source: recorded axis-error columns (${axisErrorColumns.join(", ")})`
+  : filteredGyroColumns.length === 3
+    ? "Tracking-error source: derived from setpoint minus filtered gyro"
+    : "Tracking-error source: unavailable",
       ...averageAbsoluteAxisError.map((axisResult) =>
         `${axisResult.axis} average absolute tracking error: ${
     Number.isFinite(axisResult.averageAbsoluteError)
@@ -1765,9 +2021,10 @@ const highestOvershootEvent =
       : validOvershootEvents.length >= 2
         ? "Low"
         : "Insufficient";
-    const overshootRecommendation =
-  overshootConfidence === "Insufficient"
-    ? `Collect more clean ${axisResult.axis} command events before making an overshoot-related PID change.`
+   const overshootRecommendation =
+  overshootConfidence === "Insufficient" ||
+  overshootConfidence === "Low"
+    ? `Collect more clean ${axisResult.axis} command events before evaluating overshoot.`
     : Number.isFinite(medianOvershootPercent) &&
         medianOvershootPercent >= 25
       ? `Review ${axisResult.axis} for repeated overshoot. Confirm the pattern with another log before changing PID or feedforward values.`
@@ -1804,7 +2061,7 @@ return [
 ,
 
 highestOvershootEvent
-  ? `${axisResult.axis} highest overshoot event details — sample: ${highestOvershootEvent.sampleIndex}, command end: ${highestOvershootEvent.commandEndSampleIndex}, previous setpoint: ${highestOvershootEvent.previousSetpoint.toFixed(2)}, target: ${highestOvershootEvent.commandTarget.toFixed(2)}, commanded change: ${highestOvershootEvent.commandedResponseChange.toFixed(2)}, response peak: ${highestOvershootEvent.responsePeak.toFixed(2)}, overshoot: ${highestOvershootEvent.overshootPercent.toFixed(2)}%`
+  ? `${axisResult.axis} highest overshoot event details — sample: ${highestOvershootEvent.sampleIndex}, command end: ${highestOvershootEvent.commandEndSampleIndex}, previous setpoint: ${highestOvershootEvent.previousSetpoint.toFixed(2)}, target: ${highestOvershootEvent.commandTarget.toFixed(2)}, command magnitude: ${highestOvershootEvent.commandMagnitude.toFixed(2)}, response peak: ${highestOvershootEvent.responsePeak.toFixed(2)}, overshoot: ${highestOvershootEvent.overshootPercent.toFixed(2)}%`
   : `${axisResult.axis} highest overshoot event details: Unavailable`
 ];
 }),
@@ -2250,16 +2507,27 @@ highestTrackingErrorAxis
   ? `${highestTrackingErrorAxis.axis} has the highest average tracking error at ${highestTrackingErrorAxis.averageAbsoluteError.toFixed(2)}. This axis deserves the closest review during PID tuning.`
   : "A highest tracking-error axis could not be identified.",
 
-...profileTrackingAnalysis.flatMap((profile) => [
-  `${profile.targetRpm} RPM profile tracking from ${profile.sampleCount} samples:`,
-  ...profile.axisResults.map((axisResult) =>
-    `  ${axisResult.axis}: ${
-      Number.isFinite(axisResult.averageAbsoluteError)
-        ? axisResult.averageAbsoluteError.toFixed(2)
-        : "Unavailable"
-    } average absolute error`
-  )
-]),
+...profileTrackingAnalysis.flatMap((profile) => {
+  const axisResults = Array.isArray(profile.axisResults)
+    ? profile.axisResults
+    : [];
+
+  return [
+    `${profile.targetRpm} RPM profile tracking from ${profile.sampleCount} samples:`,
+
+    ...(axisResults.length > 0
+      ? axisResults.map((axisResult) =>
+          `  ${axisResult.axis}: ${
+            Number.isFinite(axisResult.averageAbsoluteError)
+              ? axisResult.averageAbsoluteError.toFixed(2)
+              : "Unavailable"
+          } average absolute error`
+        )
+      : [
+          `  Per-axis tracking values were unavailable for this profile.`
+        ])
+  ];
+}),
 
 bestTrackingProfile
   ? `${bestTrackingProfile.targetRpm} RPM has the lowest overall tracking error at ${bestTrackingProfile.averageTrackingError.toFixed(2)}.`

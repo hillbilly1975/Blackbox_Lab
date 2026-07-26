@@ -14,7 +14,8 @@ export function buildFlightAnalysis(
   profile,
   keyHeaders,
   headspeedValues,
-  governorTargetValues
+  governorTargetValues,
+   governorLabAnalysis = null
 ) {
   const escAnalysis = analyzeEscOutput(
     averageEscOutput,
@@ -29,10 +30,18 @@ export function buildFlightAnalysis(
     profile
   );
 
-  const governorAnalysis = analyzeGovernor(
-    headspeedValues,
-    governorTargetValues
-  );
+  const legacyGovernorAnalysis = analyzeGovernor(
+  headspeedValues,
+  governorTargetValues
+);
+
+const governorAnalysis =
+  governorLabAnalysis
+    ? {
+        ...governorLabAnalysis,
+        finding: governorLabAnalysis.story
+      }
+    : legacyGovernorAnalysis;
 
   const overallScore = calculateOverallFlightScore(
     escAnalysis,

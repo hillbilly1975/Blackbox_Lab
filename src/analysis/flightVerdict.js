@@ -197,9 +197,25 @@ function rotorSpeedVerdict(headspeed, governorTarget) {
 // ------------------------------------------------------
 function tuningVerdict(pidAnalysis) {
   const score = pidAnalysis?.score;
+  const overallStatus =
+    pidAnalysis?.overallStatus ?? null;
 
-  if (!Number.isFinite(score)) {
-    return null;
+  if (
+    overallStatus === "Insufficient Data" ||
+    !Number.isFinite(score)
+  ) {
+    return {
+      key: "tuning",
+      title: "Tuning",
+      status: "watch",
+      headline: "PID tracking could not be measured",
+      detail:
+        "Setpoint data was present, but no valid axis-response or tracking windows were available. This flight cannot support a PID tuning score.",
+      action:
+        "Do not change PID values from this result. Open PID Lab to review the missing evidence.",
+      screen: "pid",
+      evidence: "PID Lab findings"
+    };
   }
 
   if (score < 50) {
@@ -208,8 +224,10 @@ function tuningVerdict(pidAnalysis) {
       title: "Tuning",
       status: "attention",
       headline: `Tracking score ${score}/100 — room to improve`,
-      detail: "The helicopter lags or overshoots what the sticks ask for. The PID Lab lists the events behind this number.",
-      action: "Open the PID Lab and work through its recommendations one change at a time.",
+      detail:
+        "The helicopter lags or overshoots what the sticks ask for. The PID Lab lists the events behind this number.",
+      action:
+        "Open the PID Lab and work through its recommendations one change at a time.",
       screen: "pid",
       evidence: "PID Lab findings"
     };
@@ -221,8 +239,10 @@ function tuningVerdict(pidAnalysis) {
       title: "Tuning",
       status: "watch",
       headline: `Tracking score ${score}/100 — decent, not crisp`,
-      detail: "Response mostly follows the sticks; the PID Lab shows where it loosens.",
-      action: "If you want it sharper, the PID Lab shows where to look.",
+      detail:
+        "Response mostly follows the sticks; the PID Lab shows where it loosens.",
+      action:
+        "If you want it sharper, the PID Lab shows where to look.",
       screen: "pid",
       evidence: "PID Lab findings"
     };
@@ -239,6 +259,13 @@ function tuningVerdict(pidAnalysis) {
     evidence: "PID Lab findings"
   };
 }
+  
+
+  
+
+  
+  
+
 
 // ------------------------------------------------------
 // Battery verdict — voltage sag over the flight
@@ -282,7 +309,153 @@ function batteryVerdict(vbat) {
     evidence: "Motor & Power chart, Log Viewer"
   };
 }
+function rotorSpeedVerdictFromLab(governorLab) {
+  if (!governorLab) {
+    return null;
+  }
 
+  if (
+    governorLab.status === "insufficient" ||
+    !Number.isFinite(governorLab.droopRpm)
+  ) {
+    return {
+      key: "rotor",
+      title: "Rotor Speed",
+      status: "watch",
+      headline: "Governor hold could not be measured",
+      detail:
+        "No stable governed-flight section was long enough for a reliable governor result.",
+      action:
+        "Do not change governor settings from this flight.",
+      screen: "governor",
+      evidence: "Headspeed vs Target chart, Governor Lab"
+    };
+  }
+
+  const droopRpm = governorLab.droopRpm;
+  const droopPercent = governorLab.droopPercent;
+
+  if (governorLab.status === "attention") {
+    return {
+      key: "rotor",
+      title: "Rotor Speed",
+      status: "attention",
+      headline: `Largest stable-flight dip ${Math.round(
+        droopRpm
+      )} rpm`,
+      detail: `${droopPercent.toFixed(
+        1
+      )}% below target during stable flight.`,
+      action:
+        "Review the matching event in Governor Lab before changing gain or power-system settings.",
+      screen: "governor",
+      evidence: "Headspeed vs Target chart, Governor Lab"
+    };
+  }
+
+  if (governorLab.status === "watch") {
+    return {
+      key: "rotor",
+      title: "Rotor Speed",
+      status: "watch",
+      headline: `Largest stable-flight dip ${Math.round(
+        droopRpm
+      )} rpm`,
+      detail: `${droopPercent.toFixed(
+        1
+      )}% below target. Review the event before making a governor change.`,
+      action:
+        "No automatic change recommended. Confirm that the dip occurred during a real airborne load.",
+      screen: "governor",
+      evidence: "Headspeed vs Target chart, Governor Lab"
+    };
+  }
+
+  return {
+    key: "rotor",
+    title: "Rotor Speed",
+    status: "good",
+    headline: "Rock-solid stable-flight headspeed",
+    detail: `Largest stable-flight dip was ${Math.round(
+      droopRpm
+    )} rpm (${droopPercent.toFixed(1)}%).`,
+    action: "Nothing to change from this result.",
+    screen: "governor",
+    evidence: "Headspeed vs Target chart, Governor Lab"
+  };
+}
+
+function batteryVerdictFromLab(batteryLab) {
+  if (!batteryLab) {
+    return null;
+  }
+
+  if (
+    batteryLab.status === "insufficient" ||
+    !Number.isFinite(batteryLab.minimumVoltsPerCell)
+  ) {
+    return {
+      key: "battery",
+      title: "Battery",
+      status: "watch",
+      headline: "Battery condition could not be assessed",
+      detail:
+        "No stable governed-flight section was long enough for a reliable battery result.",
+      action:
+        "Do not judge the pack from this flight alone.",
+      screen: "battery",
+      evidence: "Voltage Over the Flight chart, Battery Lab"
+    };
+  }
+
+  const minimumPerCell =
+    batteryLab.minimumVoltsPerCell;
+
+  if (batteryLab.status === "attention") {
+    return {
+      key: "battery",
+      title: "Battery",
+      status: "attention",
+      headline: "Low voltage observed during stable flight",
+      detail: `Lowest stable-flight voltage was ${minimumPerCell.toFixed(
+        2
+      )} V per cell.`,
+      action:
+        "Review the matching current and throttle event in Battery Lab.",
+      screen: "battery",
+      evidence: "Voltage Over the Flight chart, Battery Lab"
+    };
+  }
+
+  if (batteryLab.status === "watch") {
+    return {
+      key: "battery",
+      title: "Battery",
+      status: "watch",
+      headline: "Loaded voltage is worth reviewing",
+      detail: `Lowest stable-flight voltage was ${minimumPerCell.toFixed(
+        2
+      )} V per cell. This alone does not prove the pack is weak.`,
+      action:
+        "Compare the voltage dip with current demand in Battery Lab.",
+      screen: "battery",
+      evidence: "Voltage Over the Flight chart, Battery Lab"
+    };
+  }
+
+  return {
+    key: "battery",
+    title: "Battery",
+    status: "good",
+    headline: "Battery held up well",
+    detail: `Lowest stable-flight voltage was ${minimumPerCell.toFixed(
+      2
+    )} V per cell. No clear evidence of a weak or tired pack.`,
+    action: "Nothing to change from this result.",
+    screen: "battery",
+    evidence: "Voltage Over the Flight chart, Battery Lab"
+  };
+}
 // ------------------------------------------------------
 // buildFlightVerdict — the one call the renderer makes
 // ------------------------------------------------------
@@ -291,18 +464,19 @@ export function buildFlightVerdict({
   headspeed,
   governorTarget,
   vbat,
-  pidAnalysis
+  pidAnalysis,
+  labs
 }) {
   const governedHeadspeed = headspeed
     ? averageOf(headspeed.slice(-Math.floor(headspeed.length / 3)))
     : null;
 
   const cards = [
-    vibrationVerdict(spectra, governedHeadspeed),
-    rotorSpeedVerdict(headspeed, governorTarget),
-    tuningVerdict(pidAnalysis),
-    batteryVerdict(vbat)
-  ].filter(Boolean);
+  vibrationVerdict(spectra, governedHeadspeed),
+  rotorSpeedVerdictFromLab(labs?.governor),
+  tuningVerdict(pidAnalysis),
+  batteryVerdictFromLab(labs?.battery)
+].filter(Boolean);
 
   const worst = cards.some((card) => card.status === "attention")
     ? "attention"
