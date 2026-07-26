@@ -1,3 +1,28 @@
+## v0.3.5 — the tuning charts release
+
+### Added
+
+- **Per-axis tuning preset charts** (from Ben Britton's feedback):
+  the Log Viewer's single roll-only Setpoint-vs-Gyro chart is now
+  three cards — Roll, Pitch and Yaw Tuning — each with three
+  ready-made presets: Tracking (target + gyro), Feedforward check
+  (+ I-term: I near zero while tracking = FF carrying the
+  maneuver, as Rotorflight intends) and Term balance
+  (target + P/I/D). Beginner mode shows Tracking only; Advanced
+  mode lays everything out. Colors mean the same thing on every
+  chart: blue target, orange gyro, green I, amber P, magenta D.
+- **Remove individual flights from the Health Record**: every row
+  in the Logged Flights table has a ✕ button — one bad log no
+  longer means wiping the whole record. Trends recompute without
+  the removed flight; Clear all history stays for the full wipe.
+- The HTML report now includes the tracking chart for all three
+  axes (was roll only).
+
+### Fixed
+
+- The UI smoke test now asserts that all nine preset charts
+  render with scaled data.
+
 ## v0.3.4 — feedforward doctrine + release repair
 
 Builds directly on v0.3.3's scoring cleanup.
