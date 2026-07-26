@@ -28,7 +28,9 @@ const { mkdirSync } = require("node:fs");
   }
 
   await window.click("#welcomeSampleButton");
-  await window.waitForTimeout(3500);
+  // The sample is a real 134k-frame flight now — give the
+  // decoder time before asserting.
+  await window.waitForTimeout(15000);
 
   const verdictCount = await window.evaluate(
     () => document.querySelectorAll(".verdict-item").length
