@@ -42,24 +42,55 @@ function minimumOf(values) {
 
   return Number.isFinite(minimum) ? minimum : null;
 }
+function hasUsablePositiveData(values) {
+  if (!Array.isArray(values) || values.length < 200) {
+    return false;
+  }
 
+  let usableCount = 0;
+
+  for (const value of values) {
+    const numericValue = Number(value);
+
+    if (Number.isFinite(numericValue) && numericValue > 0) {
+      usableCount += 1;
+
+      if (usableCount >= 20) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
 export function analyzeBatteryLab({
   timeSeconds,
   vbat,
+  escVoltage,
   amperage,
+  escCurrent,
   headspeed,
   governorTarget
 }) {
-  if (
-    !Array.isArray(vbat) ||
-    vbat.length < 200
+    const selectedVoltage =
+    hasUsablePositiveData(escVoltage)
+      ? escVoltage
+      : vbat;
+
+  const selectedAmperage =
+    hasUsablePositiveData(escCurrent)
+      ? escCurrent
+      : amperage;
+   if (
+    !Array.isArray(selectedVoltage) ||
+    selectedVoltage.length < 200
   ) {
     return null;
   }
 
-  const sampleCount = Math.min(
+    const sampleCount = Math.min(
     timeSeconds?.length ?? 0,
-    vbat.length,
+    selectedVoltage.length,
     headspeed?.length ?? 0,
     governorTarget?.length ?? 0
   );
@@ -71,12 +102,12 @@ export function analyzeBatteryLab({
   const alignedTime =
     timeSeconds.slice(0, sampleCount);
 
-  const alignedVbat =
-    vbat.slice(0, sampleCount);
+    const alignedVbat =
+    selectedVoltage.slice(0, sampleCount);
 
-  const alignedAmperage =
-    Array.isArray(amperage)
-      ? amperage.slice(0, sampleCount)
+    const alignedAmperage =
+    Array.isArray(selectedAmperage)
+      ? selectedAmperage.slice(0, sampleCount)
       : null;
 
   const alignedHeadspeed =
