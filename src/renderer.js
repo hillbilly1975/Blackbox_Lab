@@ -611,8 +611,11 @@ function buildDataset(lines, pidAnalysis) {
   const headspeed = firstColumn([/headspeed/i, /^rpm/i]);
   const governorTarget = firstColumn([/governorTarget/i, /govTarget/i, /governor/i]);
   const vbat = firstColumn([/^vbat/i]);
-  const amperage = firstColumn([/amperage/i, /^Ibat/i, /current/i, /^EscI$/i]);
-  const motor = firstColumn([/^motor\[0\]/i]);
+const escVoltage = firstColumn([/^EscV$/i]);
+const amperage = firstColumn([/^amperage/i, /^Ibat/i, /^current/i]);
+const escCurrent = firstColumn([/^EscI$/i]);
+const escThrottle = firstColumn([/^EscThr$/i]);
+ const motor = firstColumn([/^motor\[0\]/i]);
 
   // ---- spectra + labelled peaks ----
   // Analyze the governed part of the flight only: during
@@ -973,18 +976,23 @@ if (
   // ---- labs + verdict ----
   const labs = {
     governor: analyzeGovernorLab({ timeSeconds, headspeed, governorTarget }),
-    esc: analyzeEscLab({
+   esc: analyzeEscLab({
   timeSeconds,
   motor,
+  escThrottle,
   amperage,
+  escCurrent,
   vbat,
+  escVoltage,
   headspeed,
   governorTarget
 }),
     battery: analyzeBatteryLab({
   timeSeconds,
   vbat,
+  escVoltage,
   amperage,
+  escCurrent,
   headspeed,
   governorTarget
 })
@@ -1492,17 +1500,18 @@ function renderGovernorEvidence(dataset) {
     window,
     [
       {
-        patterns: [/^vbat/i],
+       patterns: [/^EscV$/i],
         label: "Pack voltage (V)",
         convert: toVolts,
         color: CHART_COLORS[0]
       },
+      
       {
-        patterns: [/^Ibat$/i, /amperage/i, /^EscI$/i, /current/i],
-        label: "Current (A)",
-        convert: toAmps,
-        color: CHART_COLORS[1]
-      }
+  patterns: [/^EscI$/i],
+  label: "Current (A)",
+  convert: toAmps,
+  color: CHART_COLORS[1]
+}
     ],
     { yLabel: "volts · amps", markers, linkGroup: "droopSync" }
   );
@@ -2011,12 +2020,18 @@ function renderAllCharts(dataset) {
     "throttle (%)"
   );
 
-  renderScaledChart(
-    chartBattery,
-    dataset,
-    [{ patterns: [/^vbat/i], label: "pack voltage (V)", convert: toVolts }],
-    "pack voltage (V)"
-  );
+ renderScaledChart(
+  chartBattery,
+  dataset,
+  [
+    {
+     patterns: [/^EscV$/i],
+      label: "pack voltage (V)",
+      convert: toVolts
+    }
+  ],
+  "pack voltage (V)"
+);
 
   if (dataset.spectra.length > 0) {
     renderSpectrumChart(chartSpectrum, dataset.spectra, {

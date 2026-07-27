@@ -54,18 +54,56 @@ function statsOf(values) {
     count
   };
 }
+function hasUsablePositiveData(values) {
+  if (!Array.isArray(values) || values.length < 200) {
+    return false;
+  }
 
+  let usableCount = 0;
+
+  for (const value of values) {
+    const numericValue = Number(value);
+
+    if (Number.isFinite(numericValue) && numericValue > 0) {
+      usableCount += 1;
+
+      if (usableCount >= 20) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
 export function analyzeEscLab({
   timeSeconds,
   motor,
+  escThrottle,
   amperage,
+  escCurrent,
   vbat,
+  escVoltage,
   headspeed,
   governorTarget
 }) {
+    const selectedAmperage =
+    hasUsablePositiveData(escCurrent)
+      ? escCurrent
+      : amperage;
+
+  const selectedVoltage =
+    hasUsablePositiveData(escVoltage)
+      ? escVoltage
+      : vbat;
+
+  const selectedOutput =
+    hasUsablePositiveData(escThrottle)
+      ? escThrottle
+      : motor;
+
   const sampleCount = Math.min(
     timeSeconds?.length ?? 0,
-    motor?.length ?? 0,
+    selectedOutput?.length ?? 0,
     headspeed?.length ?? 0,
     governorTarget?.length ?? 0
   );
@@ -78,8 +116,7 @@ export function analyzeEscLab({
     timeSeconds.slice(0, sampleCount);
 
   const alignedMotor =
-    motor.slice(0, sampleCount);
-
+  selectedOutput.slice(0, sampleCount);
   const alignedHeadspeed =
     headspeed.slice(0, sampleCount);
 
@@ -87,13 +124,13 @@ export function analyzeEscLab({
     governorTarget.slice(0, sampleCount);
 
   const alignedAmperage =
-    Array.isArray(amperage)
-      ? amperage.slice(0, sampleCount)
+    Array.isArray(selectedAmperage)
+       ? selectedAmperage.slice(0, sampleCount)
       : null;
 
   const alignedVbat =
-    Array.isArray(vbat)
-      ? vbat.slice(0, sampleCount)
+    Array.isArray(selectedVoltage)
+       ? selectedVoltage.slice(0, sampleCount)
       : null;
 
   const flightPhase = detectStableFlightPhase({
@@ -305,13 +342,13 @@ export function analyzeEscLab({
           )}%, leaving ${headroomPercent.toFixed(
             1
           )}% average reserve. Review the highest-load events before changing gearing or headspeed.`
-        : `Motor output remained at or above 97% for ${saturationPercent.toFixed(
+        : `ESC-reported throttle remained at or above 97% for ${saturationPercent.toFixed(
             1
           )}% of stable flight. The governor had little remaining output authority during those periods.`;
 
   const metrics = [
     {
-      label: "Stable-flight average output",
+      label: "ESC-reported stable-flight throttle",
       value: `${averagePercent.toFixed(1)}%`
     },
     {
