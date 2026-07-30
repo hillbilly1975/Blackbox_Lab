@@ -14,6 +14,11 @@ Ready-made installers for **Windows, macOS and Linux** are on the
 [Releases page](https://github.com/hillbilly1975/Blackbox_Lab/releases/latest)
 — download, install, open a log. No build tools needed.
 
+macOS comes in two builds: `darwin-arm64` for Apple Silicon (M1 and
+newer) and `darwin-x64` for Intel Macs. **About This Mac** tells you
+which you have. Neither is code-signed, so open the app the first
+time with right-click → Open.
+
 ---
 
 ## What It Looks Like

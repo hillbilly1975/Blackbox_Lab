@@ -1,3 +1,21 @@
+## v0.3.7 — release plumbing
+
+### Added
+
+- **Downloads for Intel Macs.** Releases now build a
+  `Blackbox.Lab-darwin-x64-…zip` alongside the Apple Silicon package,
+  so Macs from before 2020 are covered. Pick the one matching your
+  machine — About This Mac says "Apple M…" or "Intel Core…".
+- `Documentation/RELEASING.md` — the release steps in the browser,
+  what each version file controls, and what to check if a build does
+  not start.
+
+### Changed
+
+- The release build confirms the tag and the two version files agree
+  before it builds anything, so any mismatch surfaces in about a
+  minute with a message naming the file to update.
+
 ## v0.3.5 — the tuning charts release
 
 ### Added
