@@ -1143,7 +1143,9 @@ function renderVerdict(dataset) {
   }
 
   verdictCard.hidden = false;
-  verdictSummary.textContent = verdict.summary;
+  verdictSummary.textContent = currentFlightSummary
+    ? `${currentFlightSummary} — ${verdict.summary}`
+    : verdict.summary;
   verdictCards.innerHTML = "";
 
   for (const card of verdict.cards) {
@@ -2315,12 +2317,20 @@ function renderFilterProfileBreakdown(dataset) {
 
 let currentDataset = null;
 let currentFlightLines = null;
+let currentFlightSummary = "";
 
 function analyzeFlight(flightIndex) {
   const flight = loadedLog.flights[flightIndex];
   const { file, sizeKb, fileType } = loadedLog;
   const lines = flight.lines;
   currentFlightLines = lines;
+
+  // A file holding several flights should never leave any doubt
+  // about which one the verdict describes.
+  currentFlightSummary =
+    loadedLog.flights.length > 1
+      ? `${flight.label} of ${loadedLog.flights.length}`
+      : "";
 
   decodeInfo.textContent = flight.decodeInfo
     ? `Binary .bbl decoded natively — ${flight.decodeInfo}`
@@ -2524,7 +2534,23 @@ async function datasetFromLogFile(file) {
     return null;
   }
 
-  const lines = logData.flights[0].lines;
+  // An "all flights" download holds several flights. Comparing
+  // against whichever happened to be recorded first is rarely
+  // what was meant, so the longest flight is used and the name
+  // says which one it was.
+  const frameCount = (flight) =>
+    (flight.stats?.intraFrames ?? 0) +
+    (flight.stats?.interFrames ?? 0);
+
+  const chosenFlight =
+    logData.flights.length > 1
+      ? [...logData.flights].sort(
+          (first, second) =>
+            frameCount(second) - frameCount(first)
+        )[0]
+      : logData.flights[0];
+
+  const lines = chosenFlight.lines;
 
   const { pidAnalysis } = buildLogAnalysis({
     fileType: logData.fileType,
@@ -2532,7 +2558,12 @@ async function datasetFromLogFile(file) {
     aircraftProfiles
   });
 
-  return { dataset: buildDataset(lines, pidAnalysis), name: file.name };
+  const name =
+    logData.flights.length > 1
+      ? `${file.name} — ${chosenFlight.label}`
+      : file.name;
+
+  return { dataset: buildDataset(lines, pidAnalysis), name };
 }
 
 function refreshCompareButtons() {
