@@ -427,11 +427,65 @@ pidAnalysis = analyzePids(
   lines,
  headspeedProfiles
 );
+// Airframe motion, used only when no rotor speed was logged.
+// It lets the app tell "no RPM sensor" apart from "this was a
+// bench run and the model never moved".
+const gyroActivityByRow = (() => {
+  const axisSamples = [0, 1, 2]
+    .map((axis) => {
+      const columnName =
+        headers.find(
+          (header) =>
+            header.toLowerCase() === `gyroadc[${axis}]`
+        ) ??
+        headers.find(
+          (header) =>
+            header.toLowerCase() === `gyroraw[${axis}]`
+        ) ??
+        null;
+
+      return columnName
+        ? getColumnSamples(
+            lines,
+            telemetryHeaderIndex,
+            columnName
+          )
+        : [];
+    })
+    .filter((samples) => samples.length > 0);
+
+  if (axisSamples.length === 0) {
+    return null;
+  }
+
+  const totals = new Map();
+
+  for (const samples of axisSamples) {
+    for (const sample of samples) {
+      const value = Number(sample.value);
+
+      if (!Number.isFinite(value)) {
+        continue;
+      }
+
+      totals.set(
+        sample.rowIndex,
+        (totals.get(sample.rowIndex) ?? 0) + Math.abs(value)
+      );
+    }
+  }
+
+  return totals;
+})();
+
 const governorLabSamples = headspeedSamples
   .map((sample) => ({
     timeSeconds: timeByRow.get(sample.rowIndex),
     measuredRpm: sample.value,
-    targetRpm: governorTargetByRow.get(sample.rowIndex)
+    targetRpm: governorTargetByRow.get(sample.rowIndex),
+    activity: gyroActivityByRow
+      ? gyroActivityByRow.get(sample.rowIndex) ?? 0
+      : null
   }))
   .filter(
     (sample) =>
@@ -451,7 +505,10 @@ const governorLabAnalysis = analyzeGovernorLab({
       ? governorLabSamples.map(
           (sample) => sample.targetRpm
         )
-      : []
+      : [],
+  activity: gyroActivityByRow
+    ? governorLabSamples.map((sample) => sample.activity)
+    : []
 });
       flightAnalysis = buildFlightAnalysis(
         averageEscOutput,

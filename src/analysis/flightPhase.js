@@ -358,30 +358,178 @@ function keepStableSegments({
   };
 }
 
+// Rotor speed is the preferred way to find steady flight.
+// Aircraft without an RPM sensor (nitro and turbine models,
+// or electric models flown without the sensor wired) log
+// headspeed as a constant zero, so the check below decides
+// which detection basis this log can support.
+export function hasUsableRotorSpeed(values) {
+  if (!Array.isArray(values)) {
+    return false;
+  }
+
+  return values.some((value) => {
+    const numericValue = Number(value);
+
+    return (
+      Number.isFinite(numericValue) &&
+      numericValue >= 500
+    );
+  });
+}
+
+function buildRollingMean(values, windowSamples) {
+  const smoothed = new Array(values.length).fill(null);
+
+  const half = Math.max(1, Math.round(windowSamples / 2));
+
+  let runningTotal = 0;
+  let runningCount = 0;
+
+  for (
+    let index = 0;
+    index < values.length + half;
+    index += 1
+  ) {
+    if (index < values.length) {
+      const entering = Number(values[index]);
+
+      if (Number.isFinite(entering)) {
+        runningTotal += entering;
+        runningCount += 1;
+      }
+    }
+
+    const leavingIndex = index - 2 * half;
+
+    if (leavingIndex >= 0) {
+      const leaving = Number(values[leavingIndex]);
+
+      if (Number.isFinite(leaving)) {
+        runningTotal -= leaving;
+        runningCount -= 1;
+      }
+    }
+
+    const centre = index - half;
+
+    if (centre >= 0 && centre < values.length) {
+      smoothed[centre] =
+        runningCount > 0
+          ? runningTotal / runningCount
+          : null;
+    }
+  }
+
+  return smoothed;
+}
+
+function getPercentile(values, fraction) {
+  const usable = values
+    .filter((value) => Number.isFinite(Number(value)))
+    .map(Number)
+    .sort((a, b) => a - b);
+
+  if (usable.length === 0) {
+    return null;
+  }
+
+  const position = Math.min(
+    usable.length - 1,
+    Math.max(0, Math.round((usable.length - 1) * fraction))
+  );
+
+  return usable[position];
+}
+
+// Without rotor speed, sustained airframe motion is what
+// separates flight from sitting on the ground. The quiet
+// and busy ends of the recording set the threshold, so the
+// result does not depend on any absolute gyro magnitude.
+function buildActivityMask({
+  activity,
+  sampleCount,
+  sampleRateHz
+}) {
+  const windowSamples = Math.max(
+    3,
+    Math.round(sampleRateHz)
+  );
+
+  const smoothed = buildRollingMean(
+    activity.slice(0, sampleCount),
+    windowSamples
+  );
+
+  const quietLevel = getPercentile(smoothed, 0.1);
+  const busyLevel = getPercentile(smoothed, 0.9);
+
+  if (
+    !Number.isFinite(quietLevel) ||
+    !Number.isFinite(busyLevel) ||
+    busyLevel <= 0
+  ) {
+    return null;
+  }
+
+  // A model sitting on the ground still logs a little gyro
+  // noise, so contrast alone is not enough to call something
+  // flight — noise against quieter noise still forms a ratio.
+  // The busy end must also clear a floor of real rotation.
+  // The floor is deliberately far below any flying model, so
+  // gentle hovering still qualifies.
+  const MINIMUM_FLIGHT_ROTATION = 15;
+
+  if (
+    busyLevel < MINIMUM_FLIGHT_ROTATION ||
+    busyLevel < quietLevel * 1.5
+  ) {
+    return null;
+  }
+
+  const threshold =
+    quietLevel + (busyLevel - quietLevel) * 0.25;
+
+  const mask = new Array(sampleCount).fill(false);
+
+  for (let index = 0; index < sampleCount; index += 1) {
+    const value = smoothed[index];
+
+    if (Number.isFinite(value) && value >= threshold) {
+      mask[index] = true;
+    }
+  }
+
+  return mask;
+}
+
 export function detectStableFlightPhase({
   timeSeconds = [],
   headspeed = [],
-  governorTarget = []
+  governorTarget = [],
+  activity = []
 }) {
 const hasGovernorTarget =
   governorTarget.length > 0;
-console.log("FLIGHT PHASE DEBUG", {
-  timeCount: timeSeconds.length,
-  headspeedCount: headspeed.length,
-  governorTargetCount: governorTarget?.length ?? 0,
-  hasGovernorTarget
-});
+const hasRotorSpeedData = hasUsableRotorSpeed(headspeed);
+const hasActivitySignal =
+  Array.isArray(activity) && activity.length > 0;
 const sampleCount =
-  hasGovernorTarget
+  !hasRotorSpeedData && hasActivitySignal
     ? Math.min(
         timeSeconds.length,
-        headspeed.length,
-        governorTarget.length
+        activity.length
       )
-    : Math.min(
-        timeSeconds.length,
-        headspeed.length
-      );
+    : hasGovernorTarget
+      ? Math.min(
+          timeSeconds.length,
+          headspeed.length,
+          governorTarget.length
+        )
+      : Math.min(
+          timeSeconds.length,
+          headspeed.length
+        );
 
   if (sampleCount < 100) {
     return {
@@ -390,6 +538,8 @@ const sampleCount =
       stableIndexes: [],
       segments: [],
       stableSampleCount: 0,
+      hasRotorSpeedData,
+      basis: "none",
       reason: "Not enough aligned samples were available."
     };
   }
@@ -422,19 +572,55 @@ const sampleCount =
     Math.round(sampleRateHz * 3)
   );
 
-  const candidateMask = buildCandidateMask({
-  timeSeconds: alignedTime,
-  headspeed: alignedHeadspeed,
-  governorTarget: alignedTarget,
-  sampleCount
-});
+  const activityMask =
+    !hasRotorSpeedData && hasActivitySignal
+      ? buildActivityMask({
+          activity,
+          sampleCount,
+          sampleRateHz
+        })
+      : null;
+
+  const basis = hasRotorSpeedData
+    ? "headspeed"
+    : activityMask
+      ? "activity"
+      : "none";
+
+  if (basis === "none") {
+    return {
+      sampleRateHz,
+      stableMask: new Array(sampleCount).fill(false),
+      stableIndexes: [],
+      segments: [],
+      stableSampleCount: 0,
+      hasRotorSpeedData,
+      basis,
+      movedDuringRecording: hasActivitySignal ? false : null,
+      reason: hasActivitySignal
+        ? "This log contains no rotor-speed data, and the airframe did not move during the recording, so no flight section could be identified."
+        : "This log contains no rotor-speed data, so a governed-flight section could not be identified."
+    };
+  }
+
+  const candidateMask =
+    basis === "activity"
+      ? activityMask
+      : buildCandidateMask({
+          timeSeconds: alignedTime,
+          headspeed: alignedHeadspeed,
+          governorTarget: alignedTarget,
+          sampleCount
+        });
 
   const transitionCleanedMask =
-    removeTargetTransitions({
-      mask: candidateMask,
-      governorTarget: alignedTarget,
-      transitionWindowSamples
-    });
+    basis === "activity"
+      ? candidateMask
+      : removeTargetTransitions({
+          mask: candidateMask,
+          governorTarget: alignedTarget,
+          transitionWindowSamples
+        });
 
   const {
     stableMask,
@@ -463,10 +649,17 @@ const sampleCount =
     stableIndexes,
     segments,
     stableSampleCount: stableIndexes.length,
+    hasRotorSpeedData,
+    basis,
+    movedDuringRecording: basis === "activity" ? true : null,
     reason:
       stableIndexes.length > 0
-        ? "Stable governed-flight samples were detected."
-        : "No stable governed-flight segment passed the phase checks."
+        ? basis === "activity"
+          ? "Steady flight was detected from airframe motion, because this log contains no rotor-speed data."
+          : "Stable governed-flight samples were detected."
+        : basis === "activity"
+          ? "The airframe moved, but no single section was steady for long enough to measure."
+          : "No stable governed-flight segment passed the phase checks."
   };
 }
 

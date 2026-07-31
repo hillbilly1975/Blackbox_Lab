@@ -751,10 +751,42 @@ const timeSeconds = timeColumn.values.map((value) =>
     : null
 );
 
+// Aircraft without an RPM sensor log headspeed as zero, so
+// airframe motion is offered as a second way to find the
+// flight section. It is only used when rotor speed is absent.
+const activityGyroColumns = [
+  extractAlignedNumericColumn(lines, telemetryHeaderIndex, [
+    /^gyroadc\[0\]$/i,
+    /^gyroraw\[0\]$/i
+  ]),
+  extractAlignedNumericColumn(lines, telemetryHeaderIndex, [
+    /^gyroadc\[1\]$/i,
+    /^gyroraw\[1\]$/i
+  ]),
+  extractAlignedNumericColumn(lines, telemetryHeaderIndex, [
+    /^gyroadc\[2\]$/i,
+    /^gyroraw\[2\]$/i
+  ])
+].filter((column) => column.values.length > 0);
+
+const motionActivity =
+  activityGyroColumns.length > 0
+    ? timeSeconds.map((_, index) =>
+        activityGyroColumns.reduce((total, column) => {
+          const value = Number(column.values[index]);
+
+          return (
+            total + (Number.isFinite(value) ? Math.abs(value) : 0)
+          );
+        }, 0)
+      )
+    : [];
+
 const stableFlightPhase = detectStableFlightPhase({
   timeSeconds,
   headspeed: headspeedColumn.values,
-  governorTarget: governorTargetColumn.values
+  governorTarget: governorTargetColumn.values,
+  activity: motionActivity
 });
 
 const sampleRate =
