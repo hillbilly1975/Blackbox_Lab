@@ -55,38 +55,54 @@ const profileSamples =
     : headspeedValues.map((measuredRpm, index) => ({
         rowIndex: null,
         measuredRpm: Number(measuredRpm),
-        targetRpm: Number(governorTargetValues[index])
+       targetRpm:
+  Number(governorTargetValues[index]) > 0
+    ? Number(governorTargetValues[index])
+    : Number(measuredRpm)
       }));
 
  const sampleCount = profileSamples.length;
 
+   
   const profileGroups = new Map();
-
+const rejected = {
+   seen: 0,
+  unstable: 0,
+  invalidNumbers: 0,
+  targetTooLow: 0,
+  outsideRange: 0,
+  accepted: 0
+};
   for (
   let sampleIndex = 0;
   sampleIndex < profileSamples.length;
   sampleIndex += 1
 ) {
   const sample = profileSamples[sampleIndex];
-
+rejected.seen += 1;
   if (
-    stableFlightPhase &&
-    !stableSampleIndexes.has(sampleIndex)
-  ) {
-    continue;
-  }
+  stableFlightPhase &&
+  !stableSampleIndexes.has(sampleIndex)
+) {
+  rejected.unstable += 1;
+  continue;
+}
+  
 
   const measuredRpm = Number(sample.measuredRpm);
   const targetRpm = Number(sample.targetRpm);
 
     if (
-      !Number.isFinite(measuredRpm) ||
-      !Number.isFinite(targetRpm) ||
-      targetRpm < 300
-    ) {
-      continue;
-    }
-
+  !Number.isFinite(measuredRpm) ||
+  !Number.isFinite(targetRpm)
+) {
+  rejected.invalidNumbers += 1;
+  continue;
+}
+if (targetRpm < 300) {
+  rejected.targetTooLow += 1;
+  continue;
+}
     // Ignore spool-up, spool-down, and large transient errors.
     const minimumStableRpm = targetRpm * 0.7;
     const maximumStableRpm = targetRpm * 1.3;
@@ -129,6 +145,7 @@ const profileSamples =
       measuredRpm
     );
   }
+ 
 
   return Array.from(profileGroups.values())
     .filter((profile) => profile.sampleCount >= 1000)
@@ -287,7 +304,11 @@ const alignedHeadspeedSamples = headspeedSamples
     rowIndex: sample.rowIndex,
     timeSeconds: timeByRow.get(sample.rowIndex),
     measuredRpm: sample.value,
-    targetRpm: governorTargetByRow.get(sample.rowIndex)
+    
+  targetRpm:
+  Number(governorTargetByRow.get(sample.rowIndex)) > 0
+    ? Number(governorTargetByRow.get(sample.rowIndex))
+    : Number(sample.value)
   }))
   .filter((sample) =>
     Number.isFinite(sample.timeSeconds) &&
@@ -404,7 +425,7 @@ const headspeedProfiles =
 pidAnalysis = analyzePids(
   analysisContext,
   lines,
-  filterAnalysis?.profileSpecificFilterAnalysis ?? []
+ headspeedProfiles
 );
 const governorLabSamples = headspeedSamples
   .map((sample) => ({

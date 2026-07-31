@@ -1,10 +1,20 @@
 # ======================================================
 # BLACKBOX LAB — RELEASE WORKFLOW
 #
-# Releasing: bump version in package.json, then
-#   git tag v0.4.0 && git push --tags
-# GitHub builds Windows, macOS and Linux packages and
-# attaches them to a DRAFT release for you to publish.
+# Releasing, in order:
+#   1. bump the version in BOTH package.json and
+#      src/version.js — they must match (a test checks it)
+#   2. merge that to main
+#   3. tag main v0.3.7 and push the tag
+#
+# The tag names the release; package.json names every
+# installer and is what the app reports about itself, so
+# all three are kept on the same number. The first job
+# below confirms that before anything is built.
+#
+# GitHub builds Windows, macOS (Apple Silicon AND Intel)
+# and Linux packages and attaches them to a DRAFT release
+# for you to publish.
 # ======================================================
 
 name: Release
@@ -17,11 +27,39 @@ permissions:
   contents: write
 
 jobs:
+  # Confirms the three version sources agree before the build
+  # starts, so nothing is packaged under the wrong number.
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must match package.json and src/version.js
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          APP="$(node -p "require('fs').readFileSync('src/version.js','utf8').match(/APP_VERSION = .([0-9.]+)./)[1]")"
+          echo "tag=$TAG  package.json=$PKG  src/version.js=$APP"
+          if [ "$TAG" != "$PKG" ] || [ "$TAG" != "$APP" ]; then
+            echo "::error::Version mismatch — tag $TAG, package.json $PKG, src/version.js $APP. Set both files to $TAG on main, then delete this tag and tag again so the installers carry the right number."
+            exit 1
+          fi
+
   build:
+    needs: check-version
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+          - os: ubuntu-latest
+          # Apple Silicon (M1 and newer) — the runner's own architecture
+          - os: macos-latest
+            arch: arm64
+          # Intel Macs. Built on the same runner using Electron's x64
+          # binary: the app is pure JavaScript, so nothing needs an
+          # Intel machine to compile. Older Macs get their own zip.
+          - os: macos-latest
+            arch: x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +68,7 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm test
-      - run: npm run make
+      - run: npm run make ${{ matrix.arch && format('-- --arch={0}', matrix.arch) || '' }}
       - name: Attach packages to draft release
         uses: softprops/action-gh-release@v2
         with:
