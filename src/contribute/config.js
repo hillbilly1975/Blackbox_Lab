@@ -11,5 +11,8 @@ export const CONTRIBUTE_ENDPOINT =
   "https://blackbox-ingest.dlsinkjr22.workers.dev/";
 
 // Reported inside the payload so contributed logs can be
-// grouped by app version. Update alongside package.json.
-export const CONTRIBUTE_APP_VERSION = "0.3.2";
+// grouped by app version. Taken from the app's own version
+// so the two can never drift apart.
+import { APP_VERSION } from "../version.js";
+
+export const CONTRIBUTE_APP_VERSION = APP_VERSION;

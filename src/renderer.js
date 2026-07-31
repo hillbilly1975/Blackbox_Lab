@@ -2440,12 +2440,18 @@ function analyzeFlight(flightIndex) {
   compareChartCard.hidden = true;
 
   // ---- community data sharing (opt-in, anonymized) ----
-  if (flight.mainFrames) {
+  // Text exports carry no decoded flight, so they skip this
+  // and sharing stays native-.bbl only.
+  if (flight.decoded) {
     // Bundled sample flights are shipped data — everyone has
     // them, so contributing them would only fill the community
     // bucket with identical copies.
     if (!file.name.startsWith("sample-")) {
-      maybeContributeFlight(flight, fileType, `${file.name}#${flightIndex}`);
+      maybeContributeFlight(
+        flight.decoded,
+        fileType,
+        `${file.name}#${flightIndex}`
+      );
     }
   }
 
