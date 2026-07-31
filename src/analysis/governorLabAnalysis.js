@@ -18,7 +18,8 @@ import {
 export function analyzeGovernorLab({
   timeSeconds,
   headspeed,
-  governorTarget
+  governorTarget,
+  activity = []
 }) {
   if (
     !Array.isArray(timeSeconds) ||
@@ -57,7 +58,8 @@ if (
   const flightPhase = detectStableFlightPhase({
     timeSeconds,
     headspeed,
-    governorTarget
+    governorTarget,
+    activity
   });
 
   const stableIndexes = flightPhase.stableIndexes;
@@ -69,8 +71,15 @@ if (
     return {
       score: null,
       status: "insufficient",
+      hasRotorSpeedData: flightPhase.hasRotorSpeedData !== false,
+      movedDuringRecording:
+        flightPhase.movedDuringRecording ?? null,
       story:
-        "No stable governed-flight section was long enough for a reliable governor assessment.",
+        flightPhase.movedDuringRecording === false
+          ? "The airframe did not move during this recording, and no rotor speed was logged, so there is no flight to assess."
+          : flightPhase.hasRotorSpeedData === false
+            ? "This log contains no rotor-speed data, so governor behaviour cannot be assessed. Governor scoring needs an RPM sensor feeding headspeed."
+            : "No stable governed-flight section was long enough for a reliable governor assessment.",
       droopRpm: null,
       droopPercent: null,
       droopTimeSeconds: null,

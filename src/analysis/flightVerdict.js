@@ -322,11 +322,24 @@ function rotorSpeedVerdictFromLab(governorLab) {
       key: "rotor",
       title: "Rotor Speed",
       status: "watch",
-      headline: "Governor hold could not be measured",
+      headline:
+        governorLab.movedDuringRecording === false
+          ? "No flight found in this recording"
+          : governorLab.hasRotorSpeedData === false
+            ? "No rotor-speed data in this log"
+            : "Governor hold could not be measured",
       detail:
-        "No stable governed-flight section was long enough for a reliable governor result.",
+        governorLab.movedDuringRecording === false
+          ? "The sticks and servos move in this log, but the airframe itself never does, and no rotor speed was recorded. That is the signature of a bench or ground run rather than a flight."
+          : governorLab.hasRotorSpeedData === false
+            ? "This log records no headspeed, which is normal for a model flown without an RPM sensor. Governor hold is measured against rotor speed, so it cannot be scored from this flight."
+            : "No stable governed-flight section was long enough for a reliable governor result.",
       action:
-        "Do not change governor settings from this flight.",
+        governorLab.movedDuringRecording === false
+          ? "Open a log recorded in flight. If this was a flight, check that the gyro and RPM sensor are being logged."
+          : governorLab.hasRotorSpeedData === false
+            ? "Nothing to fix in the log. Fit and enable an RPM sensor if you want governor scoring."
+            : "Do not change governor settings from this flight.",
       screen: "governor",
       evidence: "Headspeed vs Target chart, Governor Lab"
     };
@@ -398,11 +411,18 @@ function batteryVerdictFromLab(batteryLab) {
       key: "battery",
       title: "Battery",
       status: "watch",
-      headline: "Battery condition could not be assessed",
+      headline:
+        batteryLab.hasRotorSpeedData === false
+          ? "Battery assessment needs rotor-speed data"
+          : "Battery condition could not be assessed",
       detail:
-        "No stable governed-flight section was long enough for a reliable battery result.",
+        batteryLab.hasRotorSpeedData === false
+          ? "Pack condition is judged over a steady-load section, which this app identifies from rotor speed. This log records none, so the pack cannot be scored from this flight."
+          : "No stable governed-flight section was long enough for a reliable battery result.",
       action:
-        "Do not judge the pack from this flight alone.",
+        batteryLab.hasRotorSpeedData === false
+          ? "Nothing to fix in the log. Use the Voltage Over the Flight chart to view the pack directly."
+          : "Do not judge the pack from this flight alone.",
       screen: "battery",
       evidence: "Voltage Over the Flight chart, Battery Lab"
     };

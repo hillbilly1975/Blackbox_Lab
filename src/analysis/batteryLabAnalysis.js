@@ -165,8 +165,11 @@ export function analyzeBatteryLab({
   if (stableIndexes.length < 100) {
     return {
       status: "insufficient",
+      hasRotorSpeedData: flightPhase.hasRotorSpeedData !== false,
       story:
-        "No stable governed-flight section was long enough for a reliable battery assessment.",
+        flightPhase.hasRotorSpeedData === false
+          ? "This log contains no rotor-speed data, so a steady-load section could not be identified for a battery assessment."
+          : "No stable governed-flight section was long enough for a reliable battery assessment.",
       metrics: [
         {
           label: "Stable samples",
