@@ -65,6 +65,11 @@ export async function readLogFile(file) {
             flights.length > 1
               ? `Flight ${flight.index + 1} (${flight.durationSeconds.toFixed(1)} s)`
               : "Flight 1",
+          // The decoded flight, kept alongside the CSV-shaped
+          // rows. "Share anonymized logs" builds its payload
+          // from decoded frames and headers, so it needs the
+          // flight itself rather than the rows derived from it.
+          decoded: flight,
           get lines() {
             if (cachedLines === null) {
               cachedLines = decodedFlightToCsvLines(flight);
