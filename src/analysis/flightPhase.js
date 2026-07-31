@@ -365,7 +365,12 @@ export function detectStableFlightPhase({
 }) {
 const hasGovernorTarget =
   governorTarget.length > 0;
-
+console.log("FLIGHT PHASE DEBUG", {
+  timeCount: timeSeconds.length,
+  headspeedCount: headspeed.length,
+  governorTargetCount: governorTarget?.length ?? 0,
+  hasGovernorTarget
+});
 const sampleCount =
   hasGovernorTarget
     ? Math.min(
