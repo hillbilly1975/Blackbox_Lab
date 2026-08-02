@@ -748,6 +748,14 @@ current demand; the steady downward slope is normal discharge.
               Demo: compare with the clean sample
             </button>
           </div>
+
+          <!-- Shown when the "after" file holds several flights:
+               pick which one to compare against. Preselected on
+               the longest flight; switching re-compares. -->
+          <div class="flight-picker" id="compareFlightPicker" hidden>
+            <span class="label">"After" flight in this file</span>
+            <select id="compareFlightSelect"></select>
+          </div>
         </section>
 
         <section class="card" id="compareResultCard" hidden>
