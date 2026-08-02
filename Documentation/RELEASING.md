@@ -51,9 +51,19 @@ all, so pilots pick the one matching their machine — **About This
 Mac** tells them which: "Apple M…" means Apple Silicon, "Intel Core…"
 means Intel.
 
-Neither Mac build is code-signed, so the first launch needs
-**right-click → Open** rather than a double-click. That is normal for
-free unsigned apps and only has to be done once.
+Neither Mac build is code-signed, and macOS quarantines unsigned
+downloads. What pilots see depends on their machine, and both cases
+are normal for free unsigned apps, needed only once:
+
+- **Apple Silicon** shows *"Blackbox Lab is damaged and can't be
+  opened"*. The download is fine — clearing the quarantine flag in
+  Terminal makes it open normally:
+  `xattr -cr "/Applications/Blackbox Lab.app"`
+- **Intel** Macs usually just need **right-click → Open** on the
+  first launch.
+
+The README's Download section carries the same instructions for
+pilots.
 
 ## If something goes wrong
 
