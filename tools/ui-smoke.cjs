@@ -107,6 +107,58 @@ const { mkdirSync } = require("node:fs");
   console.log("compare rows:", compareRowCount, "| summary:", compareSummary);
   await window.screenshot({ path: "smoke-shots/08-compare.png" });
 
+  // ---- multi-flight "after" file: the flight picker ----
+  // Two known samples concatenated = one file, two flights.
+  const twoFlightPath = require("node:path").join(
+    require("node:os").tmpdir(),
+    "bbl-smoke-two-flights.bbl"
+  );
+  require("node:fs").writeFileSync(
+    twoFlightPath,
+    Buffer.concat([
+      require("node:fs").readFileSync("samples/sample-clean-tuned.bbl"),
+      require("node:fs").readFileSync("samples/sample-vibration-problem.bbl")
+    ])
+  );
+  await window.setInputFiles("#compareFileInput", twoFlightPath);
+  await window.waitForSelector("#compareFlightPicker:not([hidden])", {
+    timeout: 15000
+  });
+  const pickerState = await window.evaluate(() => ({
+    options: document.getElementById("compareFlightSelect").options.length,
+    selected: document.getElementById("compareFlightSelect").value,
+    summary: document.getElementById("compareSummary").textContent,
+    rows: document.getElementById("compareRows").innerText
+  }));
+  if (pickerState.options !== 2 || !pickerState.summary) {
+    throw new Error(
+      "compare flight picker misbehaved: " + JSON.stringify(pickerState)
+    );
+  }
+  // Flip to the other flight — the comparison must re-render
+  // with THAT flight's numbers (clean vs vibration sample, so
+  // the row values must actually change).
+  const otherFlight = pickerState.selected === "0" ? "1" : "0";
+  await window.selectOption("#compareFlightSelect", otherFlight);
+  await window.waitForTimeout(2500);
+  const flippedRows = await window.evaluate(
+    () => document.getElementById("compareRows").innerText
+  );
+  if (!flippedRows || flippedRows === pickerState.rows) {
+    throw new Error(
+      "comparison did not re-render with the picked flight's data"
+    );
+  }
+  console.log(
+    "compare flight picker ok:",
+    pickerState.options,
+    "flights | flipped to",
+    otherFlight,
+    "| rows changed:",
+    flippedRows !== pickerState.rows
+  );
+  await window.screenshot({ path: "smoke-shots/08b-compare-picker.png" });
+
   // ---- load-from-another-screen: progress dialog ----
   await window.click('.nav-button[data-target="viewer"]');
   await window.waitForTimeout(300);

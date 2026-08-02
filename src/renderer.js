@@ -34,6 +34,7 @@ import {
 } from "./analysis/flightPhase.js";
 import { buildFlightVerdict } from "./analysis/flightVerdict.js";
 import { compareFlights } from "./analysis/compareFlights.js";
+import { longestFlightIndex } from "./analysis/flightSelection.js";
 import { assessLogQuality } from "./analysis/logQuality.js";
 import { adviseFilters } from "./analysis/filterAdvisor.js";
 import {
@@ -169,6 +170,8 @@ const compareBaselineInfo = el("compareBaselineInfo");
 const compareOpenButton = el("compareOpenButton");
 const compareSampleButton = el("compareSampleButton");
 const compareFileInput = el("compareFileInput");
+const compareFlightPicker = el("compareFlightPicker");
+const compareFlightSelect = el("compareFlightSelect");
 const compareResultCard = el("compareResultCard");
 const compareChartCard = el("compareChartCard");
 const compareSummary = el("compareSummary");
@@ -2533,43 +2536,68 @@ function strongestSpectrumOf(dataset) {
   return strongest.spectrum;
 }
 
-async function datasetFromLogFile(file) {
+// The loaded "after" log. Kept around so the flight picker
+// can re-compare against any flight in the file without
+// re-reading it; datasets build lazily, once per flight.
+let comparisonLog = null;
+
+function datasetForComparisonFlight(flightIndex) {
+  const { logData, datasets } = comparisonLog;
+
+  if (!datasets.has(flightIndex)) {
+    const flight = logData.flights[flightIndex];
+    const lines = flight.lines;
+
+    const { pidAnalysis } = buildLogAnalysis({
+      fileType: logData.fileType,
+      lines,
+      aircraftProfiles
+    });
+
+    const name =
+      logData.flights.length > 1
+        ? `${logData.file.name} — ${flight.label}`
+        : logData.file.name;
+
+    datasets.set(flightIndex, {
+      dataset: buildDataset(lines, pidAnalysis),
+      name
+    });
+  }
+
+  return datasets.get(flightIndex);
+}
+
+// Load a file as the "after" side of the comparison. An
+// "all flights" download holds several flights: the picker
+// appears, preselected on the longest flight (the choice
+// the app used to make silently), and switching it
+// re-compares against that flight — so two flights of the
+// SAME file can be compared without splitting the file.
+async function loadComparisonFile(file) {
   const logData = await readLogFile(file);
 
   if (!logData || logData.flights.length === 0) {
+    comparisonLog = null;
+    compareFlightPicker.hidden = true;
     return null;
   }
 
-  // An "all flights" download holds several flights. Comparing
-  // against whichever happened to be recorded first is rarely
-  // what was meant, so the longest flight is used and the name
-  // says which one it was.
-  const frameCount = (flight) =>
-    (flight.stats?.intraFrames ?? 0) +
-    (flight.stats?.interFrames ?? 0);
+  comparisonLog = { logData, datasets: new Map() };
 
-  const chosenFlight =
-    logData.flights.length > 1
-      ? [...logData.flights].sort(
-          (first, second) =>
-            frameCount(second) - frameCount(first)
-        )[0]
-      : logData.flights[0];
+  const defaultIndex = longestFlightIndex(logData.flights);
 
-  const lines = chosenFlight.lines;
-
-  const { pidAnalysis } = buildLogAnalysis({
-    fileType: logData.fileType,
-    lines,
-    aircraftProfiles
+  compareFlightSelect.innerHTML = "";
+  logData.flights.forEach((flight, index) => {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = flight.label;
+    compareFlightSelect.appendChild(option);
   });
+  compareFlightSelect.value = String(defaultIndex);
+  compareFlightPicker.hidden = logData.flights.length < 2;
 
-  const name =
-    logData.flights.length > 1
-      ? `${file.name} — ${chosenFlight.label}`
-      : file.name;
-
-  return { dataset: buildDataset(lines, pidAnalysis), name };
+  return datasetForComparisonFlight(defaultIndex);
 }
 
 function refreshCompareButtons() {
@@ -2645,7 +2673,7 @@ compareFileInput.addEventListener("change", async () => {
   }
 
   try {
-    const result = await datasetFromLogFile(file);
+    const result = await loadComparisonFile(file);
 
     if (result && result.dataset) {
       renderComparison(result.dataset, result.name);
@@ -2659,6 +2687,19 @@ compareFileInput.addEventListener("change", async () => {
   }
 
   compareFileInput.value = "";
+});
+
+// Switching the picker re-compares on the spot — flipping
+// between two flights of one file is the whole point.
+compareFlightSelect.addEventListener("change", () => {
+  if (!comparisonLog) {
+    return;
+  }
+
+  const result = datasetForComparisonFlight(
+    Number(compareFlightSelect.value)
+  );
+  renderComparison(result.dataset, result.name);
 });
 
 compareSampleButton.addEventListener("click", async () => {
@@ -2675,7 +2716,7 @@ compareSampleButton.addEventListener("click", async () => {
     "sample-clean-tuned.bbl"
   );
 
-  const result = await datasetFromLogFile(file);
+  const result = await loadComparisonFile(file);
 
   if (result && result.dataset) {
     renderComparison(result.dataset, result.name);
