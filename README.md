@@ -24,8 +24,21 @@ Ready-made installers for **Windows, macOS and Linux** are on the
 
 macOS comes in two builds: `darwin-arm64` for Apple Silicon (M1 and
 newer) and `darwin-x64` for Intel Macs. **About This Mac** tells you
-which you have. Neither is code-signed, so open the app the first
-time with right-click → Open.
+which you have.
+
+Because the app is not signed with a paid Apple developer
+certificate, macOS quarantines it after download. On **Apple
+Silicon** this shows up as *"Blackbox Lab is damaged and can't be
+opened"* — the download is fine; that message is just macOS being
+protective about unsigned apps. Clear the quarantine flag once and
+it opens normally from then on. In Terminal:
+
+```
+xattr -cr "/Applications/Blackbox Lab.app"
+```
+
+(Adjust the path if you keep the app somewhere else.) On **Intel**
+Macs, right-click → Open on first launch is usually all it takes.
 
 ---
 
